@@ -1,0 +1,217 @@
+{% extends "index.html" %}
+
+{% block progress_width %}84%{% endblock %}
+{% block progress_value %}84{% endblock %}
+{% block progress_text %}Step 6: Small Tiles{% endblock %}
+
+{% block step1_active %}completed{% endblock %}
+{% block step2_active %}completed{% endblock %}
+{% block step3_active %}completed{% endblock %}
+{% block step4_active %}completed{% endblock %}
+{% block step5_active %}completed{% endblock %}
+{% block step6_active %}active{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>Step 6: Identify Small Tiles (Combined Criteria)</h2>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-info">
+            <p>Identify small tiles using combined criteria:</p>
+            <ul>
+                <li><strong>Irregular tiles:</strong> Area &lt; 1% of average tile area</li>
+                <li><strong>Cut tiles:</strong> Cut dimension &lt; 10mm (fixed threshold)</li>
+            </ul>
+        </div>
+        
+        <div class="row">
+            <!-- Left side: Configuration -->
+            <div class="col-md-6">
+                <form id="smallCutsForm">
+                    <div class="card mb-4">
+                        <div class="card-header">Small Tile Detection</div>
+                        <div class="card-body">
+                            <div class="alert alert-warning">
+                                <h6>Detection Criteria:</h6>
+                                <p class="mb-1"><strong>Irregular tiles:</strong> Automatically detected if area &lt; 1% of average</p>
+                                <p class="mb-1"><strong>Cut tiles:</strong> Fixed threshold of 10mm for cut dimension</p>
+                            </div>
+                            
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="excludeSmallTiles" name="exclude_small_tiles" checked>
+                                <label class="form-check-label" for="excludeSmallTiles">
+                                    Exclude small tiles from future processing
+                                </label>
+                            </div>
+                            <div class="form-text">Small tiles will be marked and can be excluded from export.</div>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary w-100" id="identifyButton">
+                        <span class="spinner-border spinner-border-sm d-none" id="identifySpinner"></span>
+                        Identify Small Tiles
+                    </button>
+                    
+                    <div class="alert alert-success mt-3 d-none" id="successAlert"></div>
+                    <div class="alert alert-danger mt-3 d-none" id="errorAlert"></div>
+                </form>
+            </div>
+            
+            <!-- Right side: Results -->
+            <div class="col-md-6">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h4>Small Tiles Visualization</h4>
+                    </div>
+                    <div class="card-body">
+                        <div id="smallCutsPlot" class="text-center">
+                            <div class="alert alert-info">
+                                Click "Identify Small Tiles" to see results.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="d-none" id="smallCutsSection">
+                    <div class="card mb-4">
+                        <div class="card-header">Summary</div>
+                        <div class="card-body">
+                            <p><strong>Total Small Tiles Found:</strong> <span id="totalSmallTiles">0</span></p>
+                            <p><strong>Small Irregular Tiles (area &lt; 1%):</strong> <span id="smallIrregularCount">0</span></p>
+                            <p><strong>Small Cut Tiles (dimension &lt; 10mm):</strong> <span id="smallCutCount">0</span></p>
+                            <div id="percentagesInfo" class="mt-3"></div>
+                            <p><strong>Status:</strong> <span id="excludeStatus" class="text-danger">Will be excluded from export</span></p>
+                        </div>
+                    </div>
+                    
+                    <div class="card" id="locationSummaryCard">
+                        <div class="card-header">Distribution by Location</div>
+                        <div class="card-body">
+                            <div id="locationDistribution"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block prev_step %}
+<a href="{{ url_for('step5') }}" class="btn btn-secondary">Previous: Classification</a>
+{% endblock %}
+
+{% block next_step %}
+<a id="nextStep" href="{{ url_for('step7') }}" class="btn btn-primary disabled">Next: Data Preparation</a>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const smallCutsForm = document.getElementById('smallCutsForm');
+    const identifyButton = document.getElementById('identifyButton');
+    const identifySpinner = document.getElementById('identifySpinner');
+    const successAlert = document.getElementById('successAlert');
+    const errorAlert = document.getElementById('errorAlert');
+    const smallCutsSection = document.getElementById('smallCutsSection');
+    const nextStep = document.getElementById('nextStep');
+    
+    smallCutsForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        // Show processing
+        identifyButton.disabled = true;
+        identifySpinner.classList.remove('d-none');
+        errorAlert.classList.add('d-none');
+        successAlert.classList.add('d-none');
+        
+        // Gather form data
+        const formData = {
+            exclude_small_tiles: document.getElementById('excludeSmallTiles').checked
+        };
+        
+        // Send request
+        fetch('/step6', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(formData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            // Hide processing
+            identifyButton.disabled = false;
+            identifySpinner.classList.add('d-none');
+            
+            if (data.error) {
+                errorAlert.textContent = data.error;
+                errorAlert.classList.remove('d-none');
+            } else {
+                successAlert.textContent = 'Small tiles identified successfully!';
+                successAlert.classList.remove('d-none');
+                
+                // Update plot
+                if (data.visualization_plot) {
+                    const plotDiv = document.getElementById('smallCutsPlot');
+                    plotDiv.innerHTML = `<img src="data:image/png;base64,${data.visualization_plot}" class="img-fluid" alt="Small Tiles Visualization">`;
+                }
+                
+                // Show results section
+                if (data.summary) {
+                    smallCutsSection.classList.remove('d-none');
+                    
+                    // Update summary
+                    document.getElementById('totalSmallTiles').textContent = data.summary.total_small_tiles || 0;
+                    document.getElementById('smallIrregularCount').textContent = data.summary.irregular_tiles_area || 0;
+                    document.getElementById('smallCutCount').textContent = data.summary.cut_tiles_dimension || 0;
+                    
+                    // Update status
+                    const excludeStatus = document.getElementById('excludeStatus');
+                    if (data.summary.tiles_excluded === 'Yes') {
+                        excludeStatus.textContent = 'Will be excluded from export';
+                        excludeStatus.className = 'text-danger';
+                    } else {
+                        excludeStatus.textContent = 'Will be included in export';
+                        excludeStatus.className = 'text-success';
+                    }
+                    
+                    // Update percentages if available
+                    if (data.summary.percentages) {
+                        const percentagesHtml = `
+                            <p class="mb-1"><small>Small irregular tiles: ${data.summary.percentages.small_irregular_percentage}% of all irregular tiles</small></p>
+                            <p class="mb-1"><small>Small cut tiles: ${data.summary.percentages.small_cut_percentage}% of all cut tiles</small></p>
+                            <p class="mb-0"><small>Total small tiles: ${data.summary.percentages.total_small_percentage}% of all tiles</small></p>
+                        `;
+                        document.getElementById('percentagesInfo').innerHTML = percentagesHtml;
+                    }
+                }
+                
+                // Update location distribution
+                if (data.location_summary && data.location_summary.length > 0) {
+                    let html = '<table class="table table-sm">';
+                    html += '<thead><tr><th>Apartment</th><th>Room</th><th>Type</th><th>Count</th></tr></thead><tbody>';
+                    data.location_summary.forEach(loc => {
+                        html += `<tr><td>${loc.apartment_name}</td><td>${loc.room_name}</td><td>${loc.small_type || '-'}</td><td>${loc.count}</td></tr>`;
+                    });
+                    html += '</tbody></table>';
+                    document.getElementById('locationDistribution').innerHTML = html;
+                } else {
+                    document.getElementById('locationDistribution').innerHTML = '<p>No small tiles found.</p>';
+                }
+                
+                // Enable next step
+                nextStep.classList.remove('disabled');
+            }
+        })
+        .catch(error => {
+            identifyButton.disabled = false;
+            identifySpinner.classList.add('d-none');
+            errorAlert.textContent = 'An error occurred: ' + error.message;
+            errorAlert.classList.remove('d-none');
+        });
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,696 @@
+{% extends "index.html" %}
+
+{% block progress_width %}88%{% endblock %}
+{% block progress_value %}88{% endblock %}
+{% block progress_text %}Step 8: Selective Matching{% endblock %}
+
+{% block step1_active %}completed{% endblock %}
+{% block step2_active %}completed{% endblock %}
+{% block step3_active %}completed{% endblock %}
+{% block step4_active %}completed{% endblock %}
+{% block step5_active %}completed{% endblock %}
+{% block step6_active %}completed{% endblock %}
+{% block step7_active %}completed{% endblock %}
+{% block step8_active %}active{% endblock %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+<style>
+    .apartment-card {
+        cursor: pointer;
+        transition: all 0.3s ease;
+        border: 2px solid #dee2e6;
+        margin-bottom: 10px;
+    }
+    
+    .apartment-card:hover {
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    .apartment-card.selected {
+        border-color: #0d6efd;
+        background-color: #e7f1ff;
+    }
+    
+    .apartment-stats {
+        font-size: 0.9rem;
+        color: #6c757d;
+    }
+    
+    .matching-history-item {
+        cursor: pointer;
+        padding: 10px;
+        border-radius: 5px;
+        margin-bottom: 5px;
+        background-color: #f8f9fa;
+    }
+    
+    .matching-history-item:hover {
+        background-color: #e9ecef;
+    }
+    
+    .matching-history-item.active {
+        background-color: #0d6efd;
+        color: white;
+    }
+    
+    .visualization-container {
+        max-height: 800px;
+        overflow-y: auto;
+    }
+    
+    .match-legend-item {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        margin-right: 15px;
+    }
+    
+    .color-box {
+        width: 20px;
+        height: 20px;
+        border: 1px solid #000;
+        border-radius: 3px;
+    }
+    
+    .selection-summary {
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 15px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>Step 8: Selective Cut Piece Matching</h2>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-info mb-4">
+            <div class="d-flex">
+                <div class="flex-shrink-0 me-3">
+                    <i class="bi bi-info-circle-fill fs-3"></i>
+                </div>
+                <div>
+                    <p class="mb-0">Select apartments to optimize matching. You can run multiple matching attempts with different selections.</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <!-- Left Panel: Selection and Configuration -->
+            <div class="col-md-5">
+                <!-- Apartment Selection -->
+                <div class="card mb-3">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">
+                            <i class="bi bi-building"></i> Select Apartments for Matching
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <button class="btn btn-sm btn-outline-primary me-2" id="selectAllBtn">
+                                <i class="bi bi-check-square"></i> Select All
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary" id="deselectAllBtn">
+                                <i class="bi bi-square"></i> Deselect All
+                            </button>
+                        </div>
+                        
+                        <div id="apartmentsList">
+                            {% for apt in apartments_info %}
+                            <div class="apartment-card p-3" data-apartment="{{ apt.name }}">
+                                <div class="form-check">
+                                    <input class="form-check-input apartment-checkbox" type="checkbox" 
+                                           value="{{ apt.name }}" id="apt_{{ loop.index }}">
+                                    <label class="form-check-label w-100" for="apt_{{ loop.index }}">
+                                        <div class="d-flex justify-content-between align-items-start">
+                                            <div>
+                                                <strong>{{ apt.name }}</strong>
+                                                <div class="apartment-stats">
+                                                    Total pieces: {{ apt.total_pieces }}
+                                                </div>
+                                            </div>
+                                            <div class="text-end">
+                                                <small class="text-muted">
+                                                    Less: {{ apt.less_than_half }}<br>
+                                                    More: {{ apt.more_than_half }}
+                                                </small>
+                                            </div>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        
+                        {% if inventory_info.available %}
+                        <div class="mt-3 p-3 bg-light rounded">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="includeInventory" checked>
+                                <label class="form-check-label" for="includeInventory">
+                                    <strong>Include Inventory</strong>
+                                    {% if has_pattern %}
+                                        <div class="small text-muted">
+                                            X pieces: {{ inventory_info.x_pieces }}, 
+                                            Y pieces: {{ inventory_info.y_pieces }}
+                                        </div>
+                                    {% else %}
+                                        <div class="small text-muted">
+                                            Total pieces: {{ inventory_info.all_pieces }}
+                                        </div>
+                                    {% endif %}
+                                </label>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <!-- Selection Summary -->
+                <div class="selection-summary d-none" id="selectionSummary">
+                    <h6>Selection Summary:</h6>
+                    <div id="summaryContent"></div>
+                </div>
+                
+                <!-- Run Matching -->
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="matchingName" class="form-label">Matching Name (optional)</label>
+                            <input type="text" class="form-control" id="matchingName" 
+                                   placeholder="e.g., Ground Floor Optimization">
+                        </div>
+                        <button type="button" class="btn btn-primary w-100" id="runMatchingBtn" disabled>
+                            <span class="spinner-border spinner-border-sm d-none" id="matchingSpinner"></span>
+                            Run Matching Process
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Matching History -->
+                {% if matching_history %}
+                <div class="card">
+                    <div class="card-header bg-light">
+                        <h6 class="mb-0">
+                            <i class="bi bi-clock-history"></i> Previous Matches
+                        </h6>
+                    </div>
+                    <div class="card-body p-2">
+                        {% for match in matching_history[:5] %}
+                        <div class="matching-history-item" data-matching-id="{{ match.id }}">
+                            <div class="d-flex justify-content-between">
+                                <div>
+                                    <strong>{{ match.name }}</strong>
+                                    <div class="small text-muted">
+                                        {{ match.selected_apartments|length }} apartments
+                                        {% if match.include_inventory %}+ inventory{% endif %}
+                                    </div>
+                                </div>
+                                <div class="text-end">
+                                    <small class="text-muted">{{ match.timestamp }}</small>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            
+            <!-- Right Panel: Results and Visualization -->
+            <div class="col-md-7">
+                <!-- Initial Placeholder -->
+                <div id="initialPlaceholder" class="card">
+                    <div class="card-body">
+                        <div class="text-center py-5">
+                            <div class="display-1 text-muted mb-4">
+                                <i class="bi bi-diagram-3"></i>
+                            </div>
+                            <h4>Selective Cut Piece Matching</h4>
+                            <p class="text-muted">Select apartments and click "Run Matching Process" to optimize cut pieces.</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Results Container (hidden initially) -->
+                <div id="resultsContainer" class="d-none">
+                    <!-- Overall Results -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-light">
+                            <h5 class="mb-0">Matching Results</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row text-center">
+                                <div class="col-4">
+                                    <h3 class="text-primary mb-0" id="totalPieces">0</h3>
+                                    <small class="text-muted">Total Pieces</small>
+                                </div>
+                                <div class="col-4">
+                                    <h3 class="text-success mb-0" id="matchedPieces">0</h3>
+                                    <small class="text-muted">Matched</small>
+                                </div>
+                                <div class="col-4">
+                                    <h3 class="text-warning mb-0" id="unmatchedPieces">0</h3>
+                                    <small class="text-muted">Unmatched</small>
+                                </div>
+                            </div>
+                            <div class="progress mt-3" style="height: 20px;">
+                                <div class="progress-bar bg-success" role="progressbar" id="matchProgress"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Apartment Results Table -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">Apartment Breakdown</h6>
+                        </div>
+                        <div class="card-body p-2">
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Apartment</th>
+                                            <th>Total</th>
+                                            <th>Matched</th>
+                                            <th>Match %</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="apartmentResultsTable">
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Visualization -->
+                    <div class="card">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0">Visual Preview</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <select class="form-select" id="vizApartmentSelect">
+                                    <option value="">Select apartment to visualize...</option>
+                                </select>
+                            </div>
+                            <div id="vizContainer" class="visualization-container">
+                                <div class="text-center py-5 text-muted">
+                                    Select an apartment to view its tile layout
+                                </div>
+                            </div>
+                            
+                            <!-- Color Legend -->
+                            <div class="mt-3 d-flex flex-wrap">
+                                <div class="match-legend-item">
+                                    <div class="color-box" style="background-color: #E6E6FA;"></div>
+                                    <small>Full Tiles</small>
+                                </div>
+                                <div class="match-legend-item">
+                                    <div class="color-box" style="background-color: #F0E68C;"></div>
+                                    <small>Irregular</small>
+                                </div>
+                                <div class="match-legend-item">
+                                    <div class="color-box" style="background-color: #FFD700;"></div>
+                                    <small>Same Apt Match</small>
+                                </div>
+                                <div class="match-legend-item">
+                                    <div class="color-box" style="background-color: #A9A9A9;"></div>
+                                    <small>Different Apt</small>
+                                </div>
+                                <div class="match-legend-item">
+                                    <div class="color-box" style="background-color: #8FBC8F;"></div>
+                                    <small>Inventory</small>
+                                </div>
+                                <div class="match-legend-item">
+                                    <div class="color-box" style="background-color: #FFFFFF; border: 1px solid #ccc;"></div>
+                                    <small>Unmatched</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Alerts -->
+        <div class="alert alert-danger mt-3 d-none" id="errorAlert"></div>
+        <div class="alert alert-success mt-3 d-none" id="successAlert"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block prev_step %}
+<a href="{{ url_for('step7') }}" class="btn btn-secondary">Previous: Data Preparation</a>
+{% endblock %}
+
+{% block next_step %}
+<a href="{{ url_for('step9') }}" class="btn btn-primary" id="nextButton">Next: Export Reports</a>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Elements
+    const apartmentCards = document.querySelectorAll('.apartment-card');
+    const apartmentCheckboxes = document.querySelectorAll('.apartment-checkbox');
+    const selectAllBtn = document.getElementById('selectAllBtn');
+    const deselectAllBtn = document.getElementById('deselectAllBtn');
+    const runMatchingBtn = document.getElementById('runMatchingBtn');
+    const matchingSpinner = document.getElementById('matchingSpinner');
+    const selectionSummary = document.getElementById('selectionSummary');
+    const summaryContent = document.getElementById('summaryContent');
+    const initialPlaceholder = document.getElementById('initialPlaceholder');
+    const resultsContainer = document.getElementById('resultsContainer');
+    const vizApartmentSelect = document.getElementById('vizApartmentSelect');
+    const vizContainer = document.getElementById('vizContainer');
+    const errorAlert = document.getElementById('errorAlert');
+    const successAlert = document.getElementById('successAlert');
+    
+    let currentMatchingId = null;
+    let selectedApartments = [];
+    
+    // Apartment card click handler
+    apartmentCards.forEach(card => {
+        card.addEventListener('click', function(e) {
+            if (e.target.type !== 'checkbox') {
+                const checkbox = this.querySelector('.apartment-checkbox');
+                checkbox.checked = !checkbox.checked;
+                updateSelection();
+            }
+        });
+    });
+    
+    // Checkbox change handler
+    apartmentCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', updateSelection);
+    });
+    
+    // Select/Deselect all
+    selectAllBtn.addEventListener('click', function() {
+        apartmentCheckboxes.forEach(cb => cb.checked = true);
+        updateSelection();
+    });
+    
+    deselectAllBtn.addEventListener('click', function() {
+        apartmentCheckboxes.forEach(cb => cb.checked = false);
+        updateSelection();
+    });
+    
+    // Update selection
+    function updateSelection() {
+        selectedApartments = [];
+        let totalPieces = 0;
+        let totalLess = 0;
+        let totalMore = 0;
+        
+        apartmentCheckboxes.forEach(checkbox => {
+            const card = checkbox.closest('.apartment-card');
+            if (checkbox.checked) {
+                card.classList.add('selected');
+                selectedApartments.push(checkbox.value);
+                
+                // Get stats from card (parse from HTML)
+                const statsText = card.querySelector('.apartment-stats').textContent;
+                const piecesMatch = statsText.match(/Total pieces: (\d+)/);
+                if (piecesMatch) totalPieces += parseInt(piecesMatch[1]);
+                
+                const lessMatch = card.querySelector('.text-muted').textContent.match(/Less: (\d+)/);
+                if (lessMatch) totalLess += parseInt(lessMatch[1]);
+                
+                const moreMatch = card.querySelector('.text-muted').textContent.match(/More: (\d+)/);
+                if (moreMatch) totalMore += parseInt(moreMatch[1]);
+            } else {
+                card.classList.remove('selected');
+            }
+        });
+        
+        // Update summary
+        if (selectedApartments.length > 0) {
+            selectionSummary.classList.remove('d-none');
+            summaryContent.innerHTML = `
+                <div class="row">
+                    <div class="col-4 text-center">
+                        <strong>${selectedApartments.length}</strong><br>
+                        <small>Apartments</small>
+                    </div>
+                    <div class="col-4 text-center">
+                        <strong>${totalPieces}</strong><br>
+                        <small>Total Pieces</small>
+                    </div>
+                    <div class="col-4 text-center">
+                        <strong>${totalLess}/${totalMore}</strong><br>
+                        <small>Less/More</small>
+                    </div>
+                </div>
+            `;
+            runMatchingBtn.disabled = false;
+        } else {
+            selectionSummary.classList.add('d-none');
+            runMatchingBtn.disabled = true;
+        }
+    }
+    
+    // Run matching
+    runMatchingBtn.addEventListener('click', function() {
+        if (selectedApartments.length === 0) return;
+        
+        // Show loading
+        runMatchingBtn.disabled = true;
+        matchingSpinner.classList.remove('d-none');
+        errorAlert.classList.add('d-none');
+        successAlert.classList.add('d-none');
+        
+        // Get options
+        const includeInventory = document.getElementById('includeInventory')?.checked || false;
+        const matchingName = document.getElementById('matchingName').value || 
+                           `Match_${selectedApartments.join('_')}_${new Date().toLocaleTimeString()}`;
+        
+        // Run matching
+        fetch('/step8/match_selected', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                selected_apartments: selectedApartments,
+                include_inventory: includeInventory,
+                matching_name: matchingName
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            runMatchingBtn.disabled = false;
+            matchingSpinner.classList.add('d-none');
+            
+            if (data.error) {
+                errorAlert.textContent = data.error;
+                errorAlert.classList.remove('d-none');
+                return;
+            }
+            
+            // Success
+            currentMatchingId = data.matching_id;
+            successAlert.textContent = 'Matching completed successfully!';
+            successAlert.classList.remove('d-none');
+            
+            // Show results
+            initialPlaceholder.classList.add('d-none');
+            resultsContainer.classList.remove('d-none');
+            
+            // Display results
+            displayResults(data.summary);
+            
+            // Add to history (reload page or update via JS)
+            setTimeout(() => {
+                location.reload();
+            }, 1000);
+        })
+        .catch(error => {
+            runMatchingBtn.disabled = false;
+            matchingSpinner.classList.add('d-none');
+            errorAlert.textContent = 'Error running matching process';
+            errorAlert.classList.remove('d-none');
+            console.error('Error:', error);
+        });
+    });
+    
+    // Display results
+    function displayResults(summary) {
+        // Overall stats
+        document.getElementById('totalPieces').textContent = summary.overall.total_pieces;
+        document.getElementById('matchedPieces').textContent = summary.overall.matched_pieces;
+        document.getElementById('unmatchedPieces').textContent = 
+            summary.overall.total_pieces - summary.overall.matched_pieces;
+        
+        // Progress bar
+        const percentage = summary.overall.match_percentage;
+        const progressBar = document.getElementById('matchProgress');
+        progressBar.style.width = percentage + '%';
+        progressBar.textContent = percentage + '%';
+        
+        // Apartment table
+        const tbody = document.getElementById('apartmentResultsTable');
+        tbody.innerHTML = '';
+        
+        // Populate visualization select
+        vizApartmentSelect.innerHTML = '<option value="">Select apartment...</option>';
+        
+        for (const [apt, stats] of Object.entries(summary.apartment_summaries)) {
+            // Table row
+            const row = document.createElement('tr');
+            const badgeClass = stats.match_percentage >= 80 ? 'success' : 
+                              stats.match_percentage >= 50 ? 'warning' : 'danger';
+            
+            row.innerHTML = `
+                <td>${apt}</td>
+                <td>${stats.total_pieces}</td>
+                <td>${stats.matched_pieces}</td>
+                <td><span class="badge bg-${badgeClass}">${stats.match_percentage}%</span></td>
+            `;
+            tbody.appendChild(row);
+            
+            // Viz option
+            const option = document.createElement('option');
+            option.value = apt;
+            option.textContent = apt;
+            vizApartmentSelect.appendChild(option);
+        }
+    }
+    
+    // Visualization apartment select
+    vizApartmentSelect.addEventListener('change', function() {
+        const apartment = this.value;
+        if (!apartment) {
+            vizContainer.innerHTML = '<div class="text-center py-5 text-muted">Select an apartment to view its tile layout</div>';
+            return;
+        }
+        
+        // Show loading
+        vizContainer.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary"></div></div>';
+        
+        // Fetch visualization
+        fetch('/step8/visualize_apartment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                apartment_name: apartment,
+                matching_id: currentMatchingId
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                vizContainer.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+                return;
+            }
+            
+            // Display visualization
+            if (data.plot) {
+                vizContainer.innerHTML = `<img src="data:image/png;base64,${data.plot}" class="img-fluid" alt="Tile layout">`;
+            }
+            
+            // Add summary if available
+            if (data.summary) {
+                const summaryHtml = `
+                    <div class="mt-3 p-3 bg-light rounded">
+                        <h6>Tile Summary:</h6>
+                        <div class="row text-center">
+                            <div class="col">
+                                <strong>${data.summary['Full Tile'] || 0}</strong><br>
+                                <small>Full</small>
+                            </div>
+                            <div class="col">
+                                <strong>${data.summary['Irregular Tile'] || 0}</strong><br>
+                                <small>Irregular</small>
+                            </div>
+                            <div class="col">
+                                <strong>${data.summary['Matched (Apartment)'] || 0}</strong><br>
+                                <small>Apt Match</small>
+                            </div>
+                            <div class="col">
+                                <strong>${data.summary['Matched (Inventory)'] || 0}</strong><br>
+                                <small>Inv Match</small>
+                            </div>
+                            <div class="col">
+                                <strong>${data.summary['Unmatched'] || 0}</strong><br>
+                                <small>Unmatched</small>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                vizContainer.innerHTML += summaryHtml;
+            }
+        })
+        .catch(error => {
+            vizContainer.innerHTML = '<div class="alert alert-danger">Error loading visualization</div>';
+            console.error('Error:', error);
+        });
+    });
+    
+    // Matching history click handlers
+    const historyItems = document.querySelectorAll('.matching-history-item');
+    historyItems.forEach(item => {
+        item.addEventListener('click', function() {
+            const matchingId = this.dataset.matchingId;
+            
+            // Remove active from all, add to this
+            historyItems.forEach(h => h.classList.remove('active'));
+            this.classList.add('active');
+            
+            // Load this matching
+            fetch('/step8/load_matching', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ matching_id: matchingId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    errorAlert.textContent = data.error;
+                    errorAlert.classList.remove('d-none');
+                    return;
+                }
+                
+                // Update current matching
+                currentMatchingId = data.matching.id;
+                
+                // Show results
+                initialPlaceholder.classList.add('d-none');
+                resultsContainer.classList.remove('d-none');
+                
+                // Display the loaded matching results
+                displayResults({
+                    overall: calculateOverall(data.matching.apartment_summaries),
+                    apartment_summaries: data.matching.apartment_summaries
+                });
+                
+                // Update selection to show what was matched
+                apartmentCheckboxes.forEach(cb => {
+                    cb.checked = data.matching.selected_apartments.includes(cb.value);
+                });
+                updateSelection();
+            })
+            .catch(error => {
+                console.error('Error loading matching:', error);
+            });
+        });
+    });
+    
+    // Helper function to calculate overall stats
+    function calculateOverall(summaries) {
+        let total = 0, matched = 0;
+        for (const stats of Object.values(summaries)) {
+            total += stats.total_pieces;
+            matched += stats.matched_pieces;
+        }
+        return {
+            total_pieces: total,
+            matched_pieces: matched,
+            match_percentage: total > 0 ? Math.round(matched/total * 100 * 10) / 10 : 0
+        };
+    }
+});
+</script>
+{% endblock %}

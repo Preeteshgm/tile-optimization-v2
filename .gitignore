@@ -1,0 +1,50 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+env/
+.env
+
+# Logs and runtime data
+logs/
+*.log
+secret_key.txt
+
+# Report outputs
+Tile_Matching_Reports_*/
+
+# Temporary files
+uploads/
+downloads/
+
+# Environment configuration
+pyenv.cfg
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# IDE specific files (optional)
+.vscode/
+.idea/
+
+# Other common Python ignores
+*.so
+.Python
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg

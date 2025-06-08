@@ -1,0 +1,212 @@
+{% extends "index.html" %}
+
+{% block progress_width %}70%{% endblock %}
+{% block progress_value %}70{% endblock %}
+{% block progress_text %}Step 5: Classification{% endblock %}
+
+{% block step1_active %}completed{% endblock %}
+{% block step2_active %}completed{% endblock %}
+{% block step3_active %}completed{% endblock %}
+{% block step4_active %}completed{% endblock %}
+{% block step5_active %}active{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>Step 5: Tile Classification</h2>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-info">
+            <p>Classify tiles based on their type (full, irregular, cut).</p>
+        </div>
+        
+        <div class="row">
+            <!-- Left side: Configuration -->
+            <div class="col-md-6">
+                <form id="classificationForm">
+                    <div class="card mb-4">
+                        <div class="card-header">Pattern Configuration</div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label class="form-label">Do tiles have a directional pattern?</label>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="has_pattern" id="hasPatternYes" value="true">
+                                    <label class="form-check-label" for="hasPatternYes">
+                                        <strong>Yes</strong> - Tiles have visible pattern/grain<br>
+                                        <small class="text-muted">Cut pieces will be separated into X and Y directions</small>
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="has_pattern" id="hasPatternNo" value="false" checked>
+                                    <label class="form-check-label" for="hasPatternNo">
+                                        <strong>No</strong> - Plain tiles with no pattern<br>
+                                        <small class="text-muted">All cut pieces organized by dimension only</small>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary w-100" id="classifyButton">
+                        <span class="spinner-border spinner-border-sm d-none" id="classifySpinner"></span>
+                        Classify Tiles
+                    </button>
+                    
+                    <div class="alert alert-success mt-3 d-none" id="successAlert"></div>
+                    <div class="alert alert-danger mt-3 d-none" id="errorAlert"></div>
+                </form>
+            </div>
+            
+            <!-- Right side: Results -->
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h4>Classification Results</h4>
+                    </div>
+                    <div class="card-body">
+                        <div id="classificationPlot" class="text-center">
+                            <div class="alert alert-info">
+                                Select pattern mode and click "Classify Tiles" to see results.
+                            </div>
+                        </div>
+                        
+                        <div class="row mt-4 d-none" id="statsSection">
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-header">Statistics</div>
+                                    <div class="card-body">
+                                        <table class="table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Tile Type</th>
+                                                    <th>Count</th>
+                                                    <th>Percentage</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="statsTable"></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-4 d-none" id="summaryInfo">
+                            <div class="card">
+                                <div class="card-header">Summary</div>
+                                <div class="card-body">
+                                    <p><strong>Pattern Mode:</strong> <span id="patternMode">-</span></p>
+                                    <p><strong>Grout Thickness:</strong> <span id="groutThickness">-</span></p>
+                                    <p><strong>Total Classified:</strong> <span id="totalClassified">-</span> tiles</p>
+                                    <p><strong>Unique Cut Sizes:</strong> <span id="uniqueCutSizes">-</span></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block prev_step %}
+<a href="{{ url_for('step4') }}" class="btn btn-secondary">Previous: Tile Analysis</a>
+{% endblock %}
+
+{% block next_step %}
+<a id="nextStep" href="{{ url_for('step6') }}" class="btn btn-primary disabled">Next: Identify Small Tiles</a>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const classificationForm = document.getElementById('classificationForm');
+    const classifyButton = document.getElementById('classifyButton');
+    const classifySpinner = document.getElementById('classifySpinner');
+    const successAlert = document.getElementById('successAlert');
+    const errorAlert = document.getElementById('errorAlert');
+    const statsSection = document.getElementById('statsSection');
+    const summaryInfo = document.getElementById('summaryInfo');
+    const nextStep = document.getElementById('nextStep');
+    
+    classificationForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        // Show processing
+        classifyButton.disabled = true;
+        classifySpinner.classList.remove('d-none');
+        errorAlert.classList.add('d-none');
+        successAlert.classList.add('d-none');
+        
+        // Gather form data
+        const formData = {
+            has_pattern: document.querySelector('input[name="has_pattern"]:checked').value === 'true'
+        };
+        
+        // Send request
+        fetch('/step5', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(formData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            // Hide processing
+            classifyButton.disabled = false;
+            classifySpinner.classList.add('d-none');
+            
+            if (data.error) {
+                errorAlert.textContent = data.error;
+                errorAlert.classList.remove('d-none');
+            } else {
+                successAlert.textContent = 'Tiles classified successfully!';
+                successAlert.classList.remove('d-none');
+                
+                // Update plot
+                if (data.classification_plot) {
+                    const plotDiv = document.getElementById('classificationPlot');
+                    plotDiv.innerHTML = `<img src="data:image/png;base64,${data.classification_plot}" class="img-fluid" alt="Classification Results">`;
+                }
+                
+                // Show statistics
+                if (data.summary && data.summary.stats) {
+                    statsSection.classList.remove('d-none');
+                    const statsTable = document.getElementById('statsTable');
+                    statsTable.innerHTML = '';
+                    
+                    data.summary.stats.forEach(stat => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${stat.type}</td>
+                            <td>${stat.count}</td>
+                            <td>${stat.percentage}%</td>
+                        `;
+                        statsTable.appendChild(row);
+                    });
+                }
+                
+                // Show summary
+                if (data.summary) {
+                    summaryInfo.classList.remove('d-none');
+                    document.getElementById('patternMode').textContent = data.summary.pattern_mode || '-';
+                    document.getElementById('groutThickness').textContent = data.summary.grout_thickness || '-';
+                    document.getElementById('totalClassified').textContent = data.summary.total_classified || '-';
+                    document.getElementById('uniqueCutSizes').textContent = data.summary.unique_cut_sizes || '-';
+                }
+                
+                // Enable next step
+                nextStep.classList.remove('disabled');
+            }
+        })
+        .catch(error => {
+            classifyButton.disabled = false;
+            classifySpinner.classList.add('d-none');
+            errorAlert.textContent = 'An error occurred: ' + error.message;
+            errorAlert.classList.remove('d-none');
+        });
+    });
+});
+</script>
+{% endblock %}

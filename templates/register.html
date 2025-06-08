@@ -1,0 +1,235 @@
+{% extends "index.html" %}
+
+{% block title %}Register - Tile Layout Optimization{% endblock %}
+{% block page_title %}Create Your Account{% endblock %}
+
+{% block progress_width_value %}0{% endblock %}
+{% block progress_value %}0{% endblock %}
+{% block progress_text %}User Registration{% endblock %}
+
+{% block head_extra %}
+<style>
+    .register-container {
+        max-width: 500px;
+        margin: 2rem auto;
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: var(--border-radius);
+        box-shadow: var(--shadow);
+        padding: 3rem;
+        position: relative;
+        z-index: 10;
+    }
+    
+    .register-header {
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+    
+    .register-icon {
+        width: 80px;
+        height: 80px;
+        background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1.5rem;
+        font-size: 2rem;
+        color: white;
+    }
+    
+    .register-header h2 {
+        color: #2d3748;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+        font-size: 2rem;
+    }
+    
+    .register-header p {
+        color: #6b7280;
+        margin: 0;
+        font-size: 1.1rem;
+    }
+    
+    .input-group {
+        margin-bottom: 1.5rem;
+    }
+    
+    .input-group label {
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 0.5rem;
+        display: block;
+    }
+    
+    .form-control {
+        font-size: 1rem;
+        padding: 0.875rem 1rem;
+    }
+    
+    .requirements {
+        font-size: 0.85rem;
+        color: #6b7280;
+        margin-top: 0.25rem;
+    }
+    
+    .btn-register {
+        background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+        border: none;
+        border-radius: 12px;
+        padding: 1rem 2rem;
+        font-weight: 600;
+        font-size: 1.1rem;
+        color: white;
+        width: 100%;
+        transition: var(--transition);
+        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
+    }
+    
+    .btn-register:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+        color: white;
+    }
+    
+    .login-link {
+        text-align: center;
+        margin-top: 2rem;
+        padding-top: 2rem;
+        border-top: 1px solid #e5e7eb;
+    }
+    
+    .login-link a {
+        color: var(--primary-color);
+        text-decoration: none;
+        font-weight: 600;
+        transition: var(--transition);
+    }
+    
+    .login-link a:hover {
+        color: var(--secondary-color);
+    }
+    
+    .alert {
+        margin-bottom: 1.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="register-container">
+    <div class="register-header">
+        <div class="register-icon">
+            <i class="bi bi-person-plus-fill"></i>
+        </div>
+        <h2>Create Account</h2>
+        <p>Join the Tile Layout Optimization System</p>
+    </div>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                    <i class="bi bi-{{ 'exclamation-triangle' if category == 'error' else 'check-circle' if category == 'success' else 'info-circle' }} me-2"></i>
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <form method="POST" id="registerForm">
+        <div class="input-group">
+            <label for="username">Username</label>
+            <input type="text" 
+                   class="form-control" 
+                   id="username" 
+                   name="username" 
+                   required 
+                   autocomplete="username"
+                   placeholder="Choose a username">
+            <div class="requirements">Minimum 3 characters</div>
+        </div>
+
+        <div class="input-group">
+            <label for="email">Email Address</label>
+            <input type="email" 
+                   class="form-control" 
+                   id="email" 
+                   name="email" 
+                   required 
+                   autocomplete="email"
+                   placeholder="your.email@example.com">
+            <div class="requirements">Valid email address required</div>
+        </div>
+
+        <div class="input-group">
+            <label for="password">Password</label>
+            <input type="password" 
+                   class="form-control" 
+                   id="password" 
+                   name="password" 
+                   required 
+                   autocomplete="new-password"
+                   placeholder="Create a strong password">
+            <div class="requirements">Minimum 6 characters</div>
+        </div>
+
+        <div class="input-group">
+            <label for="confirm_password">Confirm Password</label>
+            <input type="password" 
+                   class="form-control" 
+                   id="confirm_password" 
+                   name="confirm_password" 
+                   required 
+                   autocomplete="new-password"
+                   placeholder="Re-enter your password">
+        </div>
+
+        <button type="submit" class="btn-register">
+            <i class="bi bi-person-plus me-2"></i>Create Account
+        </button>
+    </form>
+
+    <div class="login-link">
+        Already have an account? <a href="{{ url_for('login') }}">Sign in here</a>
+    </div>
+</div>
+{% endblock %}
+
+{% block javascript %}
+// Form validation and enhancement
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('registerForm');
+    const password = document.getElementById('password');
+    const confirmPassword = document.getElementById('confirm_password');
+    
+    // Password confirmation validation
+    confirmPassword.addEventListener('input', function() {
+        if (password.value !== confirmPassword.value) {
+            confirmPassword.setCustomValidity('Passwords do not match');
+        } else {
+            confirmPassword.setCustomValidity('');
+        }
+    });
+    
+    // Form submission with loading state
+    form.addEventListener('submit', function(e) {
+        const button = document.querySelector('.btn-register');
+        
+        // Validate passwords match
+        if (password.value !== confirmPassword.value) {
+            e.preventDefault();
+            alert('Passwords do not match');
+            return;
+        }
+        
+        // Show loading state
+        button.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Creating Account...';
+        button.disabled = true;
+    });
+});
+{% endblock %}

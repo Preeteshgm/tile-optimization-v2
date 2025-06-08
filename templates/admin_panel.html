@@ -1,0 +1,305 @@
+{% extends "index.html" %}
+
+{% block progress_width_value %}0{% endblock %}
+{% block progress_value %}0{% endblock %}
+{% block progress_text %}Admin Panel{% endblock %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+<style>
+    .admin-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 2rem 0;
+        margin-bottom: 2rem;
+        border-radius: 15px;
+    }
+    
+    .stats-card {
+        background: white;
+        border-radius: 15px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        border: 1px solid #e2e8f0;
+        transition: transform 0.3s ease;
+    }
+    
+    .stats-card:hover {
+        transform: translateY(-2px);
+    }
+    
+    .stats-icon {
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+    }
+    
+    .stats-number {
+        font-size: 2rem;
+        font-weight: bold;
+        margin-bottom: 0.5rem;
+    }
+    
+    .table-container {
+        background: white;
+        border-radius: 15px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+    }
+    
+    .table th {
+        background: #f8f9fa;
+        border: none;
+        color: #2d3748;
+        font-weight: 600;
+    }
+    
+    .badge {
+        font-size: 0.8rem;
+        padding: 0.5rem 0.75rem;
+    }
+    
+    .btn-action {
+        padding: 0.25rem 0.75rem;
+        font-size: 0.8rem;
+        border-radius: 8px;
+    }
+    
+    .pending-alert {
+        border: none;
+        border-radius: 12px;
+        background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+        color: #8b4513;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+    <!-- Admin Header -->
+    <div class="admin-header text-center">
+        <h1><i class="bi bi-shield-check me-3"></i>Admin Panel</h1>
+        <p>User Management & System Administration</p>
+    </div>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show" role="alert">
+                    <i class="bi bi-{{ 'exclamation-triangle' if category == 'error' else 'check-circle' if category == 'success' else 'info-circle' }}"></i>
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <!-- Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3 mb-3">
+            <div class="stats-card text-center">
+                <div class="stats-icon text-primary">
+                    <i class="bi bi-people-fill"></i>
+                </div>
+                <div class="stats-number text-primary">{{ users|length }}</div>
+                <div class="text-muted">Total Users</div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="stats-card text-center">
+                <div class="stats-icon text-success">
+                    <i class="bi bi-person-check-fill"></i>
+                </div>
+                <div class="stats-number text-success">{{ users|selectattr('status', 'equalto', 'active')|list|length }}</div>
+                <div class="text-muted">Active Users</div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="stats-card text-center">
+                <div class="stats-icon text-warning">
+                    <i class="bi bi-clock-fill"></i>
+                </div>
+                <div class="stats-number text-warning">{{ pending_users|length }}</div>
+                <div class="text-muted">Pending Approval</div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="stats-card text-center">
+                <div class="stats-icon text-info">
+                    <i class="bi bi-shield-fill"></i>
+                </div>
+                <div class="stats-number text-info">{{ users|selectattr('role', 'equalto', 'admin')|list|length }}</div>
+                <div class="text-muted">Administrators</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pending Registrations -->
+    {% if pending_users %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="alert pending-alert">
+                <h5><i class="bi bi-exclamation-triangle-fill me-2"></i>Pending User Registrations</h5>
+                <p class="mb-0">{{ pending_users|length }} user{{ 's' if pending_users|length != 1 else '' }} waiting for approval.</p>
+            </div>
+            
+            <div class="table-container">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>Email</th>
+                            <th>Requested Role</th>
+                            <th>Registration Date</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for user in pending_users %}
+                        <tr>
+                            <td>
+                                <strong>{{ user.username }}</strong>
+                            </td>
+                            <td>{{ user.email }}</td>
+                            <td>
+                                <span class="badge bg-secondary">{{ user.role|title }}</span>
+                            </td>
+                            <td>{{ user.created_at[:19]|replace('T', ' ') if user.created_at else 'N/A' }}</td>
+                            <td>
+                                <form method="POST" style="display: inline;">
+                                    <input type="hidden" name="username" value="{{ user.username }}">
+                                    <button type="submit" name="action" value="approve" 
+                                            class="btn btn-success btn-action me-1"
+                                            onclick="return confirm('Approve user {{ user.username }}?')">
+                                        <i class="bi bi-check-lg"></i> Approve
+                                    </button>
+                                    <button type="submit" name="action" value="reject" 
+                                            class="btn btn-danger btn-action"
+                                            onclick="return confirm('Reject user {{ user.username }}? This will permanently delete their registration.')">
+                                        <i class="bi bi-x-lg"></i> Reject
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- All Users -->
+    <div class="row">
+        <div class="col-12">
+            <div class="table-container">
+                <div class="p-3 border-bottom">
+                    <h4 class="mb-0"><i class="bi bi-people me-2"></i>All Users</h4>
+                </div>
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Username</th>
+                            <th>Email</th>
+                            <th>Role</th>
+                            <th>Status</th>
+                            <th>Last Login</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for user in users %}
+                        <tr>
+                            <td>
+                                <strong>{{ user.username }}</strong>
+                                {% if user.username == session.username %}
+                                    <span class="badge bg-info ms-1">You</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ user.email }}</td>
+                            <td>
+                                {% if user.role == 'admin' %}
+                                    <span class="badge bg-danger">Admin</span>
+                                {% elif user.role == 'user' %}
+                                    <span class="badge bg-primary">User</span>
+                                {% elif user.role == 'guest' %}
+                                    <span class="badge bg-secondary">Guest</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if user.status == 'active' %}
+                                    <span class="badge bg-success">Active</span>
+                                {% elif user.status == 'pending' %}
+                                    <span class="badge bg-warning">Pending</span>
+                                {% elif user.status == 'suspended' %}
+                                    <span class="badge bg-danger">Suspended</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if user.last_login %}
+                                    {{ user.last_login[:19]|replace('T', ' ') }}
+                                {% else %}
+                                    <span class="text-muted">Never</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if user.username != session.username %}
+                                <form method="POST" style="display: inline;">
+                                    <input type="hidden" name="username" value="{{ user.username }}">
+                                    {% if user.status == 'active' %}
+                                        <button type="submit" name="action" value="suspend" 
+                                                class="btn btn-warning btn-action me-1"
+                                                onclick="return confirm('Suspend user {{ user.username }}?')">
+                                            <i class="bi bi-pause-circle"></i> Suspend
+                                        </button>
+                                    {% elif user.status == 'suspended' %}
+                                        <button type="submit" name="action" value="activate" 
+                                                class="btn btn-success btn-action me-1"
+                                                onclick="return confirm('Activate user {{ user.username }}?')">
+                                            <i class="bi bi-play-circle"></i> Activate
+                                        </button>
+                                    {% endif %}
+                                </form>
+                                {% else %}
+                                    <span class="text-muted">Current User</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="bi bi-lightning-charge me-2"></i>Quick Actions</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4 mb-2">
+                            <a href="{{ url_for('index') }}" class="btn btn-primary w-100">
+                                <i class="bi bi-house me-2"></i>Return to Main App
+                            </a>
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <a href="{{ url_for('register') }}" class="btn btn-info w-100">
+                                <i class="bi bi-person-plus me-2"></i>Registration Page
+                            </a>
+                        </div>
+                        <div class="col-md-4 mb-2">
+                            <button class="btn btn-secondary w-100" onclick="location.reload()">
+                                <i class="bi bi-arrow-clockwise me-2"></i>Refresh Data
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

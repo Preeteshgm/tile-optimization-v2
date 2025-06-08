@@ -1,0 +1,1436 @@
+{% extends "index.html" %}
+
+{% block progress_width_value %}0{% endblock %}
+{% block progress_value %}0{% endblock %}
+{% block progress_text %}Welcome{% endblock %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<!-- Floating Background Elements -->
+<div class="floating-bg">
+    <div class="floating-tile floating-tile-1"></div>
+    <div class="floating-tile floating-tile-2"></div>
+    <div class="floating-tile floating-tile-3"></div>
+    <div class="floating-tile floating-tile-4"></div>
+    <div class="floating-tile floating-tile-5"></div>
+</div>
+
+<div class="container-fluid px-4">
+    <!-- User Welcome Bar -->
+    <div class="welcome-bar">
+        <div class="user-info">
+            <div class="user-avatar">
+                <i class="bi bi-person-circle"></i>
+            </div>
+            <div class="user-details">
+                <span class="welcome-text">Welcome back,</span>
+                <span class="user-name">{{ session.username|title if session.username else 'User' }}</span>
+            </div>
+        </div>
+        <div class="user-actions">
+            <a href="{{ url_for('change_password') }}" class="btn btn-outline-light btn-sm">
+                <i class="bi bi-gear"></i> Settings
+            </a>
+            <a href="{{ url_for('logout') }}" class="btn btn-outline-light btn-sm">
+                <i class="bi bi-box-arrow-right"></i> Logout
+            </a>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="row justify-content-center">
+        <div class="col-12 col-xl-10">
+            
+            <!-- Project Status Alert -->
+            {% if project_exists %}
+            <div class="status-alert">
+                <div class="alert-content">
+                    <div class="alert-icon">
+                        <i class="bi bi-folder-open"></i>
+                    </div>
+                    <div class="alert-text">
+                        <h5>Active Project Detected</h5>
+                        <p>You have an existing project. Continue working or start fresh.</p>
+                    </div>
+                    <div class="alert-actions">
+                        <button class="btn btn-warning btn-sm" onclick="clearProjectData()">
+                            <i class="bi bi-trash"></i> Clear Data
+                        </button>
+                    </div>
+                </div>
+                <button class="alert-close" onclick="this.parentElement.style.display='none'">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+            {% endif %}
+
+            <!-- Hero Section -->
+            <div class="hero-section">
+                <div class="hero-content">
+                    <div class="row align-items-center">
+                        <div class="col-lg-7">
+                            <div class="hero-text">
+                                <div class="hero-badge">
+                                    <i class="bi bi-cpu"></i>
+                                    <span>AI-Powered Optimization</span>
+                                </div>
+                                <h1 class="hero-title">
+                                    Smart Tile <span class="highlight">Optimization</span> Portal
+                                </h1>
+                                <p class="hero-description">
+                                    Transform your architectural DXF files into optimized tile layouts with 
+                                    intelligent pattern recognition and automated waste reduction algorithms.
+                                </p>
+                                
+                                <!-- Stats Row -->
+                                <div class="stats-row">
+                                    <div class="stat-box">
+                                        <div class="stat-number">15%</div>
+                                        <div class="stat-label">Cost Reduction</div>
+                                    </div>
+                                    <div class="stat-box">
+                                        <div class="stat-number">90%</div>
+                                        <div class="stat-label">Time Saved</div>
+                                    </div>
+                                    <div class="stat-box">
+                                        <div class="stat-number">9</div>
+                                        <div class="stat-label">Smart Steps</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="hero-actions">
+                                    <button onclick="startNewProject()" class="btn-hero">
+                                        <i class="bi bi-rocket-takeoff"></i>
+                                        Start Optimization
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-5">
+                            <div class="hero-visual">
+                                <!-- Tile Demo -->
+                                <div class="tile-demo">
+                                    <div class="demo-grid">
+                                        <div class="demo-tile full-tile"></div>
+                                        <div class="demo-tile cut-tile"></div>
+                                        <div class="demo-tile full-tile"></div>
+                                        <div class="demo-tile irregular-tile"></div>
+                                        <div class="demo-tile full-tile"></div>
+                                        <div class="demo-tile matched-tile"></div>
+                                        <div class="demo-tile full-tile"></div>
+                                        <div class="demo-tile optimized-tile"></div>
+                                        <div class="demo-tile full-tile"></div>
+                                    </div>
+                                    <div class="demo-arrow">
+                                        <i class="bi bi-arrow-right"></i>
+                                    </div>
+                                    <div class="demo-result">
+                                        <i class="bi bi-check-circle-fill"></i>
+                                        <span>Optimized!</span>
+                                    </div>
+                                </div>
+                                
+                                <!-- Company Logo -->
+                                <div class="logo-container">
+                                    <img src="{{ url_for('static', filename='images/company-logo.png') }}" 
+                                         alt="Company Logo" class="company-logo">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Workflow Section -->
+            <div class="workflow-section">
+                <div class="section-header">
+                    <div class="section-badge">
+                        <i class="bi bi-diagram-3"></i>
+                        <span>Intelligent Process</span>
+                    </div>
+                    <h2 class="section-title">9-Step Optimization Workflow</h2>
+                    <p class="section-subtitle">
+                        Advanced algorithms guide you through every step of tile optimization
+                    </p>
+                </div>
+
+                <div class="row">
+                    <div class="col-lg-8">
+                        <div class="workflow-steps">
+                            <!-- Step 1 -->
+                            <div class="workflow-step">
+                                <div class="step-icon step-1">
+                                    <i class="bi bi-file-earmark-arrow-up"></i>
+                                </div>
+                                <div class="step-content">
+                                    <h5>Load DXF File</h5>
+                                    <p>AI extracts room boundaries and tile starting points automatically</p>
+                                </div>
+                                <div class="step-number">1</div>
+                            </div>
+
+                            <!-- Step 2 -->
+                            <div class="workflow-step">
+                                <div class="step-icon step-2">
+                                    <i class="bi bi-cursor-text"></i>
+                                </div>
+                                <div class="step-content">
+                                    <h5>Name Rooms</h5>
+                                    <p>Smart labeling system organizes apartments and rooms</p>
+                                </div>
+                                <div class="step-number">2</div>
+                            </div>
+
+                            <!-- Step 3 -->
+                            <div class="workflow-step">
+                                <div class="step-icon step-3">
+                                    <i class="bi bi-arrow-clockwise"></i>
+                                </div>
+                                <div class="step-content">
+                                    <h5>Set Orientation</h5>
+                                    <p>Intelligent orientation control for optimal aesthetics</p>
+                                </div>
+                                <div class="step-number">3</div>
+                            </div>
+
+                            <!-- Step 4 -->
+                            <div class="workflow-step">
+                                <div class="step-icon step-4">
+                                    <i class="bi bi-grid-3x3"></i>
+                                </div>
+                                <div class="step-content">
+                                    <h5>Tile Coverage</h5>
+                                    <p>Precision grid generation with automated spacing</p>
+                                </div>
+                                <div class="step-number">4</div>
+                            </div>
+
+                            <!-- Step 5 -->
+                            <div class="workflow-step">
+                                <div class="step-icon step-5">
+                                    <i class="bi bi-layers"></i>
+                                </div>
+                                <div class="step-content">
+                                    <h5>Classification</h5>
+                                    <p>Machine learning classifies tiles by type and complexity</p>
+                                </div>
+                                <div class="step-number">5</div>
+                            </div>
+
+                            <!-- Step 6 -->
+                            <div class="workflow-step">
+                                <div class="step-icon step-6">
+                                    <i class="bi bi-search"></i>
+                                </div>
+                                <div class="step-content">
+                                    <h5>Identify Small Cuts</h5>
+                                    <p>Advanced detection finds problematic small pieces</p>
+                                </div>
+                                <div class="step-number">6</div>
+                            </div>
+
+                            <!-- Step 7 -->
+                            <div class="workflow-step">
+                                <div class="step-icon step-7">
+                                    <i class="bi bi-database"></i>
+                                </div>
+                                <div class="step-content">
+                                    <h5>Data Preparation</h5>
+                                    <p>Algorithm prepares pieces for optimization matching</p>
+                                </div>
+                                <div class="step-number">7</div>
+                            </div>
+
+                            <!-- Step 8 -->
+                            <div class="workflow-step">
+                                <div class="step-icon step-8">
+                                    <i class="bi bi-puzzle"></i>
+                                </div>
+                                <div class="step-content">
+                                    <h5>Optimize Matching</h5>
+                                    <p>AI matches pieces across apartments for efficiency</p>
+                                </div>
+                                <div class="step-number">8</div>
+                            </div>
+
+                            <!-- Step 9 -->
+                            <div class="workflow-step">
+                                <div class="step-icon step-9">
+                                    <i class="bi bi-file-earmark-spreadsheet"></i>
+                                </div>
+                                <div class="step-content">
+                                    <h5>Export Reports</h5>
+                                    <p>Generate comprehensive analytics and documentation</p>
+                                </div>
+                                <div class="step-number">9</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-lg-4">
+                        <div class="sidebar-cards">
+                            
+                            <!-- Quick Actions -->
+                            {% if project_exists %}
+                            <div class="sidebar-card">
+                                <div class="card-header">
+                                    <i class="bi bi-lightning-charge"></i>
+                                    <h5>Quick Actions</h5>
+                                </div>
+                                <div class="card-body">
+                                    <button onclick="startNewProject()" class="action-btn primary">
+                                        <i class="bi bi-plus-circle"></i>
+                                        New Project
+                                    </button>
+                                    <button onclick="clearProjectData()" class="action-btn warning">
+                                        <i class="bi bi-trash"></i>
+                                        Clear Data
+                                    </button>
+                                    <div class="card-note">
+                                        <i class="bi bi-info-circle"></i>
+                                        New project auto-clears existing data
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
+
+                            <!-- Benefits -->
+                            <div class="sidebar-card">
+                                <div class="card-header">
+                                    <i class="bi bi-trophy"></i>
+                                    <h5>Key Benefits</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="benefit-item">
+                                        <div class="benefit-icon reduce-waste">
+                                            <i class="bi bi-graph-down-arrow"></i>
+                                        </div>
+                                        <div class="benefit-text">
+                                            <h6>Reduce Material Waste</h6>
+                                            <p>AI optimization cuts waste by up to 15%</p>
+                                        </div>
+                                    </div>
+                                    <div class="benefit-item">
+                                        <div class="benefit-icon save-time">
+                                            <i class="bi bi-stopwatch"></i>
+                                        </div>
+                                        <div class="benefit-text">
+                                            <h6>Save Planning Time</h6>
+                                            <p>Automated calculations in minutes</p>
+                                        </div>
+                                    </div>
+                                    <div class="benefit-item">
+                                        <div class="benefit-icon analytics">
+                                            <i class="bi bi-bar-chart"></i>
+                                        </div>
+                                        <div class="benefit-text">
+                                            <h6>Smart Analytics</h6>
+                                            <p>Comprehensive project insights</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Requirements -->
+                            <div class="sidebar-card">
+                                <div class="card-header">
+                                    <i class="bi bi-file-earmark-check"></i>
+                                    <h5>DXF Requirements</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="requirement-item">
+                                        <i class="bi bi-layers"></i>
+                                        <span>Room boundaries on <code>"Tile Layout"</code> layer</span>
+                                    </div>
+                                    <div class="requirement-item">
+                                        <i class="bi bi-geo-alt"></i>
+                                        <span>Starting points on <code>"SP"</code> layer</span>
+                                    </div>
+                                    <div class="requirement-item">
+                                        <i class="bi bi-vector-pen"></i>
+                                        <span>Closed polylines for tile dimensions</span>
+                                    </div>
+                                    <div class="requirement-item">
+                                        <i class="bi bi-bounding-box"></i>
+                                        <span>Clear room separation</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Call to Action -->
+            <div class="cta-section">
+                <div class="cta-content">
+                    <div class="cta-icon">
+                        <i class="bi bi-rocket-takeoff"></i>
+                    </div>
+                    <h3>Ready to Optimize Your Tile Project?</h3>
+                    <p>Join professionals saving time and costs with AI-powered tile optimization</p>
+                    <button onclick="startNewProject()" class="btn-cta">
+                        <span>Start Optimization Now</span>
+                        <i class="bi bi-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- Clear Data Modal -->
+<div class="modal fade" id="clearDataModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-icon">
+                    <i class="bi bi-exclamation-triangle"></i>
+                </div>
+                <h5 class="modal-title">Clear Project Data</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="warning-content">
+                    <p>This will permanently delete all project data including:</p>
+                    <ul class="deletion-list">
+                        <li><i class="bi bi-file-x"></i> DXF processing results</li>
+                        <li><i class="bi bi-building-x"></i> Room configurations</li>
+                        <li><i class="bi bi-grid-x"></i> Tile classifications</li>
+                        <li><i class="bi bi-graph-down"></i> Matching results</li>
+                    </ul>
+                    <div class="danger-note">
+                        <i class="bi bi-shield-exclamation"></i>
+                        <strong>This action cannot be undone.</strong>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" onclick="confirmClearData()">
+                    <i class="bi bi-trash"></i> Clear All Data
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block next_step %}
+<button onclick="startNewProject()" class="btn btn-primary">Get Started</button>
+{% endblock %}
+
+{% block extra_scripts %}
+<style>
+/* Simple Creative Styles - No Syntax Errors */
+:root {
+    --primary-color: #667eea;
+    --secondary-color: #764ba2;
+    --accent-color: #fbbf24;
+    --success-color: #10b981;
+    --warning-color: #f59e0b;
+    --danger-color: #ef4444;
+    --glass-bg: rgba(255, 255, 255, 0.1);
+    --glass-border: rgba(255, 255, 255, 0.2);
+    --shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    --border-radius: 16px;
+    --transition: all 0.3s ease;
+}
+
+* {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+body {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    position: relative;
+    overflow-x: hidden;
+}
+
+/* Floating Background */
+.floating-bg {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: -1;
+    opacity: 0.1;
+}
+
+.floating-tile {
+    position: absolute;
+    width: 60px;
+    height: 60px;
+    background: rgba(255, 255, 255, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    animation: float 8s ease-in-out infinite;
+}
+
+.floating-tile-1 { top: 10%; left: 5%; animation-delay: 0s; }
+.floating-tile-2 { top: 30%; right: 10%; animation-delay: 2s; }
+.floating-tile-3 { bottom: 30%; left: 8%; animation-delay: 4s; }
+.floating-tile-4 { top: 60%; right: 15%; animation-delay: 6s; }
+.floating-tile-5 { bottom: 10%; right: 50%; animation-delay: 1s; }
+
+@keyframes float {
+    0%, 100% { transform: translateY(0px) rotate(0deg); opacity: 0.3; }
+    50% { transform: translateY(-30px) rotate(180deg); opacity: 0.8; }
+}
+
+/* Welcome Bar */
+.welcome-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--border-radius);
+    padding: 15px 25px;
+    margin-bottom: 30px;
+    box-shadow: var(--shadow);
+    color: white;
+}
+
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.user-avatar {
+    width: 45px;
+    height: 45px;
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    animation: pulse 3s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+.user-details {
+    display: flex;
+    flex-direction: column;
+}
+
+.welcome-text {
+    font-size: 0.9rem;
+    opacity: 0.8;
+}
+
+.user-name {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.user-actions {
+    display: flex;
+    gap: 10px;
+}
+
+/* Status Alert */
+.status-alert {
+    background: linear-gradient(135deg, var(--warning-color), #f59e0b);
+    border-radius: var(--border-radius);
+    padding: 20px 25px;
+    margin-bottom: 30px;
+    color: white;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: var(--shadow);
+    animation: slideIn 0.5s ease-out;
+}
+
+@keyframes slideIn {
+    from { transform: translateY(-20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+.alert-content {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.alert-icon {
+    font-size: 28px;
+    animation: bounce 2s ease-in-out infinite;
+}
+
+@keyframes bounce {
+    0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+    40% { transform: translateY(-8px); }
+    60% { transform: translateY(-4px); }
+}
+
+.alert-text h5 {
+    margin: 0 0 5px 0;
+    font-weight: 600;
+}
+
+.alert-text p {
+    margin: 0;
+    opacity: 0.9;
+}
+
+.alert-close {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 5px;
+    border-radius: 50%;
+    transition: var(--transition);
+}
+
+.alert-close:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* Hero Section */
+.hero-section {
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--border-radius);
+    padding: 50px;
+    margin-bottom: 50px;
+    box-shadow: var(--shadow);
+    color: white;
+    position: relative;
+    overflow: hidden;
+}
+
+.hero-section::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+    animation: shine 4s infinite;
+}
+
+@keyframes shine {
+    0% { left: -100%; }
+    100% { left: 100%; }
+}
+
+.hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 50px;
+    padding: 8px 20px;
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 25px;
+    animation: fadeInUp 0.6s ease-out;
+}
+
+.hero-title {
+    font-size: clamp(2.5rem, 5vw, 3.5rem);
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 20px;
+    animation: fadeInUp 0.6s ease-out 0.2s both;
+}
+
+.highlight {
+    background: linear-gradient(135deg, var(--accent-color), #f59e0b);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.hero-description {
+    font-size: 1.2rem;
+    line-height: 1.6;
+    opacity: 0.9;
+    margin-bottom: 30px;
+    max-width: 500px;
+    animation: fadeInUp 0.6s ease-out 0.4s both;
+}
+
+/* Stats Row */
+.stats-row {
+    display: flex;
+    gap: 25px;
+    margin-bottom: 35px;
+    animation: fadeInUp 0.6s ease-out 0.6s both;
+}
+
+.stat-box {
+    text-align: center;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 15px 20px;
+    backdrop-filter: blur(10px);
+    transition: var(--transition);
+}
+
+.stat-box:hover {
+    transform: translateY(-5px);
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.stat-number {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--accent-color);
+    display: block;
+}
+
+.stat-label {
+    font-size: 0.9rem;
+    opacity: 0.8;
+    margin-top: 5px;
+}
+
+.hero-actions {
+    animation: fadeInUp 0.6s ease-out 0.8s both;
+}
+
+.btn-hero {
+    background: linear-gradient(135deg, var(--accent-color), #f59e0b);
+    border: none;
+    border-radius: 50px;
+    padding: 15px 30px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: white;
+    cursor: pointer;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 8px 25px rgba(251, 191, 36, 0.3);
+}
+
+.btn-hero:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 35px rgba(251, 191, 36, 0.4);
+}
+
+/* Hero Visual */
+.hero-visual {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 30px;
+    animation: fadeInRight 0.8s ease-out;
+}
+
+/* Tile Demo */
+.tile-demo {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    backdrop-filter: blur(10px);
+}
+
+.demo-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 25px);
+    grid-template-rows: repeat(3, 25px);
+    gap: 2px;
+}
+
+.demo-tile {
+    width: 25px;
+    height: 25px;
+    border-radius: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    animation: tileShimmer 3s ease-in-out infinite;
+}
+
+.full-tile { background: var(--success-color); animation-delay: 0s; }
+.cut-tile { background: var(--warning-color); animation-delay: 0.3s; }
+.irregular-tile { background: var(--danger-color); animation-delay: 0.6s; }
+.matched-tile { background: var(--primary-color); animation-delay: 0.9s; }
+.optimized-tile { background: #8b5cf6; animation-delay: 1.2s; }
+
+@keyframes tileShimmer {
+    0%, 100% { opacity: 0.7; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.1); }
+}
+
+.demo-arrow {
+    font-size: 20px;
+    color: var(--accent-color);
+    animation: arrowPulse 2s ease-in-out infinite;
+}
+
+@keyframes arrowPulse {
+    0%, 100% { transform: translateX(0); }
+    50% { transform: translateX(8px); }
+}
+
+.demo-result {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.demo-result i {
+    font-size: 24px;
+    color: var(--success-color);
+    animation: resultPop 2s ease-in-out infinite;
+}
+
+@keyframes resultPop {
+    0%, 90%, 100% { transform: scale(1); }
+    95% { transform: scale(1.2); }
+}
+
+/* Logo */
+.logo-container {
+    text-align: center;
+}
+
+.company-logo {
+    max-width: 180px;
+    max-height: 100px;
+    border-radius: 12px;
+    transition: var(--transition);
+    filter: drop-shadow(0 8px 20px rgba(0,0,0,0.2));
+}
+
+.company-logo:hover {
+    transform: scale(1.05);
+}
+
+/* Workflow Section */
+.workflow-section {
+    margin-bottom: 50px;
+}
+
+.section-header {
+    text-align: center;
+    margin-bottom: 40px;
+    color: white;
+}
+
+.section-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 50px;
+    padding: 8px 20px;
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 20px;
+    color: white;
+}
+
+.section-title {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: 15px;
+}
+
+.section-subtitle {
+    font-size: 1.1rem;
+    opacity: 0.8;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+/* Workflow Steps */
+.workflow-steps {
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--border-radius);
+    padding: 30px;
+    box-shadow: var(--shadow);
+}
+
+.workflow-step {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 20px;
+    margin-bottom: 15px;
+    border-radius: 12px;
+    transition: var(--transition);
+    color: white;
+    position: relative;
+    opacity: 0;
+    transform: translateX(-20px);
+    animation: slideInLeft 0.6s ease-out forwards;
+}
+
+.workflow-step:nth-child(1) { animation-delay: 0.1s; }
+.workflow-step:nth-child(2) { animation-delay: 0.2s; }
+.workflow-step:nth-child(3) { animation-delay: 0.3s; }
+.workflow-step:nth-child(4) { animation-delay: 0.4s; }
+.workflow-step:nth-child(5) { animation-delay: 0.5s; }
+.workflow-step:nth-child(6) { animation-delay: 0.6s; }
+.workflow-step:nth-child(7) { animation-delay: 0.7s; }
+.workflow-step:nth-child(8) { animation-delay: 0.8s; }
+.workflow-step:nth-child(9) { animation-delay: 0.9s; }
+
+@keyframes slideInLeft {
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.workflow-step:hover {
+    background: rgba(255, 255, 255, 0.05);
+    transform: translateX(5px);
+}
+
+.step-icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    color: white;
+    position: relative;
+    flex-shrink: 0;
+}
+
+.step-1 { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
+.step-2 { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
+.step-3 { background: linear-gradient(135deg, #06b6d4, #0891b2); }
+.step-4 { background: linear-gradient(135deg, #10b981, #059669); }
+.step-5 { background: linear-gradient(135deg, #f59e0b, #d97706); }
+.step-6 { background: linear-gradient(135deg, #ef4444, #dc2626); }
+.step-7 { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
+.step-8 { background: linear-gradient(135deg, #06b6d4, #0891b2); }
+.step-9 { background: linear-gradient(135deg, #10b981, #059669); }
+
+.step-content {
+    flex: 1;
+}
+
+.step-content h5 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 5px;
+}
+
+.step-content p {
+    opacity: 0.8;
+    margin: 0;
+    font-size: 0.95rem;
+}
+
+.step-number {
+    width: 24px;
+    height: 24px;
+    background: white;
+    color: #333;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+/* Sidebar Cards */
+.sidebar-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.sidebar-card {
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+    color: white;
+    transition: var(--transition);
+}
+
+.sidebar-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 12px 40px rgba(102, 126, 234, 0.2);
+}
+
+.card-header {
+    padding: 20px 25px 15px;
+    border-bottom: 1px solid var(--glass-border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.card-header i {
+    font-size: 20px;
+    color: var(--accent-color);
+}
+
+.card-header h5 {
+    margin: 0;
+    font-weight: 600;
+}
+
+.card-body {
+    padding: 20px 25px;
+}
+
+/* Action Buttons */
+.action-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border: none;
+    border-radius: 8px;
+    font-weight: 500;
+    transition: var(--transition);
+    cursor: pointer;
+    margin-bottom: 10px;
+}
+
+.action-btn.primary {
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    color: white;
+}
+
+.action-btn.warning {
+    background: linear-gradient(135deg, var(--warning-color), #f59e0b);
+    color: white;
+}
+
+.action-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+}
+
+.card-note {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    opacity: 0.8;
+    margin-top: 10px;
+}
+
+/* Benefit Items */
+.benefit-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.benefit-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+}
+
+.reduce-waste { background: linear-gradient(135deg, var(--success-color), #059669); }
+.save-time { background: linear-gradient(135deg, var(--primary-color), #1d4ed8); }
+.analytics { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
+
+.benefit-text h6 {
+    margin: 0 0 5px 0;
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.benefit-text p {
+    margin: 0;
+    font-size: 0.85rem;
+    opacity: 0.8;
+}
+
+/* Requirement Items */
+.requirement-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.9rem;
+    margin-bottom: 12px;
+    padding: 8px 0;
+    transition: var(--transition);
+}
+
+.requirement-item:hover {
+    transform: translateX(5px);
+}
+
+.requirement-item i {
+    color: var(--primary-color);
+    font-size: 16px;
+}
+
+.requirement-item code {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+}
+
+/* CTA Section */
+.cta-section {
+    background: linear-gradient(135deg, #232526, #414345);
+    border-radius: var(--border-radius);
+    padding: 50px;
+    text-align: center;
+    color: white;
+    position: relative;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+}
+
+.cta-content {
+    position: relative;
+    z-index: 2;
+}
+
+.cta-icon {
+    width: 70px;
+    height: 70px;
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    margin: 0 auto 25px;
+    animation: ctaPulse 2s ease-in-out infinite;
+}
+
+@keyframes ctaPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+.cta-content h3 {
+    font-size: 2.2rem;
+    font-weight: 700;
+    margin-bottom: 15px;
+}
+
+.cta-content p {
+    font-size: 1.1rem;
+    opacity: 0.9;
+    margin-bottom: 30px;
+    max-width: 500px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.btn-cta {
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+    border: none;
+    border-radius: 50px;
+    padding: 16px 32px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: white;
+    cursor: pointer;
+    transition: var(--transition);
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+}
+
+.btn-cta:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 35px rgba(102, 126, 234, 0.4);
+}
+
+/* Modal Enhancements */
+.modal-content {
+    border: none;
+    border-radius: var(--border-radius);
+    box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.modal-icon {
+    width: 50px;
+    height: 50px;
+    background: linear-gradient(135deg, var(--warning-color), #f59e0b);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    color: white;
+}
+
+.warning-content p {
+    color: #374151;
+    margin-bottom: 15px;
+}
+
+.deletion-list {
+    list-style: none;
+    padding: 0;
+    margin-bottom: 20px;
+}
+
+.deletion-list li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 5px 0;
+    color: #6b7280;
+}
+
+.deletion-list i {
+    color: var(--danger-color);
+}
+
+.danger-note {
+    background: #fee2e2;
+    border: 1px solid #fecaca;
+    border-radius: 8px;
+    padding: 15px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #dc2626;
+}
+
+/* Core Animations */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeInRight {
+    from {
+        opacity: 0;
+        transform: translateX(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .welcome-bar {
+        flex-direction: column;
+        gap: 15px;
+        text-align: center;
+    }
+    
+    .hero-section {
+        padding: 30px 20px;
+    }
+    
+    .stats-row {
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    
+    .workflow-steps {
+        padding: 20px;
+    }
+    
+    .cta-section {
+        padding: 40px 20px;
+    }
+    
+    .tile-demo {
+        transform: scale(0.9);
+    }
+}
+
+@media (max-width: 576px) {
+    .hero-title {
+        font-size: 2.2rem;
+    }
+    
+    .section-title {
+        font-size: 2rem;
+    }
+    
+    .stats-row {
+        flex-direction: column;
+        align-items: center;
+        gap: 15px;
+    }
+    
+    .workflow-step {
+        flex-direction: column;
+        text-align: center;
+        gap: 15px;
+    }
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Simple hover effects for workflow steps
+    const workflowSteps = document.querySelectorAll('.workflow-step');
+    workflowSteps.forEach(step => {
+        step.addEventListener('mouseenter', function() {
+            this.style.background = 'rgba(255, 255, 255, 0.05)';
+            this.style.transform = 'translateX(10px)';
+        });
+        
+        step.addEventListener('mouseleave', function() {
+            this.style.background = 'transparent';
+            this.style.transform = 'translateX(0)';
+        });
+    });
+
+    // Simple tile demo animation
+    function animateTileDemo() {
+        const tiles = document.querySelectorAll('.demo-tile');
+        tiles.forEach((tile, index) => {
+            setTimeout(() => {
+                tile.style.transform = 'scale(1.2)';
+                setTimeout(() => {
+                    tile.style.transform = 'scale(1)';
+                }, 200);
+            }, index * 100);
+        });
+    }
+    
+    // Start tile animation and repeat
+    setTimeout(animateTileDemo, 1000);
+    setInterval(animateTileDemo, 5000);
+
+    // Simple parallax for floating tiles
+    window.addEventListener('scroll', function() {
+        const scrolled = window.pageYOffset;
+        const tiles = document.querySelectorAll('.floating-tile');
+        tiles.forEach((tile, index) => {
+            const speed = (index + 1) * 0.05;
+            tile.style.transform = 'translateY(' + (scrolled * speed) + 'px)';
+        });
+    });
+});
+
+// Enhanced session management functions
+function startNewProject() {
+    const buttons = document.querySelectorAll('button[onclick="startNewProject()"]');
+    buttons.forEach(btn => {
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Starting...';
+        btn.disabled = true;
+    });
+    
+    // Simple loading overlay
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(102, 126, 234, 0.9); display: flex; align-items: center; justify-content: center; z-index: 9999; color: white; font-size: 1.2rem;';
+    overlay.innerHTML = '<div style="text-align: center;"><div class="spinner-border" style="width: 3rem; height: 3rem;"></div><div style="margin-top: 20px;">Starting optimization engine...</div></div>';
+    document.body.appendChild(overlay);
+    
+    setTimeout(function() {
+        window.location.href = "{{ url_for('step1') }}";
+    }, 1500);
+}
+
+function clearProjectData() {
+    new bootstrap.Modal(document.getElementById('clearDataModal')).show();
+}
+
+function confirmClearData() {
+    bootstrap.Modal.getInstance(document.getElementById('clearDataModal')).hide();
+    
+    const clearButtons = document.querySelectorAll('button[onclick="clearProjectData()"]');
+    clearButtons.forEach(btn => {
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Clearing...';
+        btn.disabled = true;
+    });
+    
+    fetch('/clear-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('success', data.message);
+            setTimeout(() => window.location.reload(), 1500);
+        } else {
+            showAlert('danger', 'Error: ' + data.error);
+            clearButtons.forEach(btn => {
+                btn.innerHTML = '<i class="bi bi-trash me-2"></i>Clear All Data';
+                btn.disabled = false;
+            });
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showAlert('danger', 'Error clearing data. Please try again.');
+    });
+}
+
+function showAlert(type, message) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = 'alert alert-' + type + ' alert-dismissible fade show position-fixed';
+    alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    alertDiv.innerHTML = '<i class="bi bi-' + (type === 'success' ? 'check-circle' : 'exclamation-triangle') + ' me-2"></i>' + message + '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
+    
+    document.body.appendChild(alertDiv);
+    
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.remove();
+        }
+    }, 5000);
+}
+</script>
+{% endblock %}

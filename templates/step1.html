@@ -1,0 +1,198 @@
+{% extends "index.html" %}
+
+{% block progress_width %}14%{% endblock %}
+{% block progress_value %}14{% endblock %}
+{% block progress_text %}Step 1: Load DXF{% endblock %}
+
+{% block step1_active %}active{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-body p-4">
+        <div class="row">
+            <!-- Left column: Form and summary -->
+            <div class="col-md-4">
+                <!-- Upload form -->
+                <h5 class="mb-3">Select DXF File</h5>
+                <form id="uploadForm" enctype="multipart/form-data" class="mb-4">
+                    <div class="mb-3">
+                        <input class="form-control" type="file" id="dxfFile" name="dxf_file" accept=".dxf">
+                        <div class="form-text">Upload a DXF file containing room boundaries and start points (SP layer).</div>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100" id="processButton">
+                        <span class="spinner-border spinner-border-sm d-none me-2" id="processSpinner" role="status" aria-hidden="true"></span>
+                        Process DXF File
+                    </button>
+                </form>
+
+                <div class="alert alert-info mb-4 d-none" id="processingAlert">
+                    <strong>Processing...</strong> Extracting rooms, start points, and tile sizes.
+                </div>
+
+                <div class="alert alert-danger mb-4 d-none" id="errorAlert"></div>
+
+                <!-- Summary section -->
+                <div class="d-none" id="summarySection">
+                    <h5 class="mb-3">Summary</h5>
+                    <div class="mb-3">
+                        <div class="mb-2 d-flex justify-content-between align-items-center">
+                            <span>Rooms Found:</span> 
+                            <span id="roomCount" class="badge bg-primary">0</span>
+                        </div>
+                        <div class="mb-2 d-flex justify-content-between align-items-center">
+                            <span>Apartments Identified:</span> 
+                            <span id="apartmentCount" class="badge bg-primary">0</span>
+                        </div>
+                        <div class="mb-2 d-flex justify-content-between align-items-center">
+                            <span>Start Points Found:</span> 
+                            <span id="startPointCount" class="badge bg-primary">0</span>
+                        </div>
+                        <div>
+                            <span>Tile Sizes:</span>
+                            <div id="tileSizes" class="mt-1">None detected</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Right column: Visualizations -->
+            <div class="col-md-8">
+                <div class="row">
+                    <!-- Room Boundaries -->
+                    <div class="col-md-6">
+                        <h5 class="mb-3">Room Boundaries & Start Points</h5>
+                        <div class="border rounded mb-4" id="roomPlotContainer">
+                            <div id="roomPlot" class="img-fluid text-center p-3">
+                                <img src="" alt="Room Boundaries" class="img-fluid d-none">
+                                <!-- Placeholder -->
+                                <div id="roomPlotPlaceholder" class="d-flex justify-content-center align-items-center" style="height: 300px;">
+                                    <div class="text-center text-muted">
+                                        <i class="bi bi-bounding-box" style="font-size: 2rem;"></i>
+                                        <p class="mt-2">Room boundaries will appear here after processing</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Apartment Clusters -->
+                    <div class="col-md-6">
+                        <h5 class="mb-3">Apartment Clusters</h5>
+                        <div class="border rounded mb-4" id="clusterPlotContainer">
+                            <div id="clusterPlot" class="img-fluid text-center p-3">
+                                <img src="" alt="Room Clusters" class="img-fluid d-none">
+                                <!-- Placeholder -->
+                                <div id="clusterPlotPlaceholder" class="d-flex justify-content-center align-items-center" style="height: 300px;">
+                                    <div class="text-center text-muted">
+                                        <i class="bi bi-grid-3x3-gap" style="font-size: 2rem;"></i>
+                                        <p class="mt-2">Apartment clusters will appear here after processing</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block next_step %}
+<a id="nextStepButton" href="{{ url_for('step2') }}" class="btn btn-primary disabled">Next: Room Naming</a>
+{% endblock %}
+
+{% block head_extra %}
+<!-- Add Bootstrap Icons -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const uploadForm = document.getElementById('uploadForm');
+        const processButton = document.getElementById('processButton');
+        const processSpinner = document.getElementById('processSpinner');
+        const processingAlert = document.getElementById('processingAlert');
+        const errorAlert = document.getElementById('errorAlert');
+        const summarySection = document.getElementById('summarySection');
+        const nextStepButton = document.getElementById('nextStepButton');
+        const clusterPlotImg = document.querySelector('#clusterPlot img');
+        const roomPlotImg = document.querySelector('#roomPlot img');
+        const clusterPlotPlaceholder = document.getElementById('clusterPlotPlaceholder');
+        const roomPlotPlaceholder = document.getElementById('roomPlotPlaceholder');
+        
+        uploadForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Show processing indicators
+            processButton.disabled = true;
+            processSpinner.classList.remove('d-none');
+            processingAlert.classList.remove('d-none');
+            errorAlert.classList.add('d-none');
+            
+            const formData = new FormData(uploadForm);
+            
+            fetch('/step1', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Hide processing indicators
+                processButton.disabled = false;
+                processSpinner.classList.add('d-none');
+                processingAlert.classList.add('d-none');
+                
+                if (data.error) {
+                    // Show error
+                    errorAlert.textContent = data.error;
+                    errorAlert.classList.remove('d-none');
+                } else {
+                    // Show results
+                    document.getElementById('roomCount').textContent = data.room_count;
+                    document.getElementById('apartmentCount').textContent = data.apartment_count;
+                    document.getElementById('startPointCount').textContent = data.start_point_count;
+                    
+                    // Format tile sizes
+                    if (data.tile_sizes && data.tile_sizes.length > 0) {
+                        const tileSizesString = data.tile_sizes.map(size => `${size[0]}mm × ${size[1]}mm`).join(', ');
+                        document.getElementById('tileSizes').textContent = tileSizesString;
+                    } else {
+                        document.getElementById('tileSizes').textContent = 'None detected';
+                    }
+                    
+                    // Show plots and hide placeholders
+                    if (data.cluster_plot) {
+                        clusterPlotImg.src = 'data:image/png;base64,' + data.cluster_plot;
+                        clusterPlotImg.classList.remove('d-none');
+                        if (clusterPlotPlaceholder) clusterPlotPlaceholder.classList.add('d-none');
+                    }
+                    
+                    if (data.room_plot) {
+                        roomPlotImg.src = 'data:image/png;base64,' + data.room_plot;
+                        roomPlotImg.classList.remove('d-none');
+                        if (roomPlotPlaceholder) roomPlotPlaceholder.classList.add('d-none');
+                    }
+                    
+                    // Show summary
+                    summarySection.classList.remove('d-none');
+                    
+                    // Enable next button
+                    if (nextStepButton) nextStepButton.classList.remove('disabled');
+                }
+            })
+            .catch(error => {
+                // Hide processing indicators
+                processButton.disabled = false;
+                processSpinner.classList.add('d-none');
+                processingAlert.classList.add('d-none');
+                
+                // Show error
+                errorAlert.textContent = 'An error occurred: ' + error.message;
+                errorAlert.classList.remove('d-none');
+            });
+        });
+    });
+</script>
+{% endblock %}

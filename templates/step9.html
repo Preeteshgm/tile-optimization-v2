@@ -1,0 +1,564 @@
+{% extends "index.html" %}
+
+{% block progress_width %}100%{% endblock %}
+{% block progress_value %}100{% endblock %}
+{% block progress_text %}Step 9: Export Reports{% endblock %}
+
+{% block step1_active %}completed{% endblock %}
+{% block step2_active %}completed{% endblock %}
+{% block step3_active %}completed{% endblock %}
+{% block step4_active %}completed{% endblock %}
+{% block step5_active %}completed{% endblock %}
+{% block step6_active %}completed{% endblock %}
+{% block step7_active %}completed{% endblock %}
+{% block step8_active %}completed{% endblock %}
+{% block step9_active %}active{% endblock %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+<style>
+    .matching-item {
+        cursor: pointer;
+        padding: 15px;
+        margin-bottom: 10px;
+        border: 2px solid #dee2e6;
+        border-radius: 8px;
+        transition: all 0.3s ease;
+    }
+    
+    .matching-item:hover {
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    .matching-item.selected {
+        border-color: #0d6efd;
+        background-color: #e7f1ff;
+    }
+    
+    .export-options {
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 20px;
+    }
+    
+    .summary-stats {
+        display: flex;
+        justify-content: space-around;
+        text-align: center;
+        margin: 20px 0;
+    }
+    
+    .stat-item h3 {
+        margin: 0;
+        color: #0d6efd;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>Step 9: Export Reports and Visual Documentation</h2>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-info mb-4">
+            <div class="d-flex">
+                <div class="flex-shrink-0 me-3">
+                    <i class="bi bi-info-circle-fill fs-3"></i>
+                </div>
+                <div>
+                    <p class="mb-0">Select a matching result to export comprehensive Excel reports and visual documentation.</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <!-- Left column: Matching Selection -->
+            <div class="col-md-5">
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">
+                            <i class="bi bi-list-check"></i> Select Matching Result
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        {% if matching_history %}
+                            {% for match in matching_history %}
+                            <div class="matching-item" data-matching-id="{{ match.id }}" 
+                                 data-matching-name="{{ match.name }}"
+                                 data-matching-apartments='{{ match.selected_apartments | tojson }}'
+                                 data-matching-summaries='{{ match.apartment_summaries | tojson }}'>
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <h6 class="mb-1">{{ match.name }}</h6>
+                                        <p class="mb-1 text-muted small">{{ match.timestamp }}</p>
+                                        <div class="d-flex gap-2 flex-wrap">
+                                            {% for apt in match.selected_apartments %}
+                                            <span class="badge bg-secondary">{{ apt }}</span>
+                                            {% endfor %}
+                                            {% if match.include_inventory %}
+                                            <span class="badge bg-info">+ Inventory</span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    <div class="text-end">
+                                        <i class="bi bi-check-circle fs-4 text-success d-none selected-icon"></i>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="text-center py-4 text-muted">
+                                <i class="bi bi-inbox fs-1"></i>
+                                <p>No matching results available</p>
+                                <a href="{{ url_for('step8') }}" class="btn btn-primary btn-sm">
+                                    Go to Matching
+                                </a>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <!-- Export Options -->
+                <div class="card">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">
+                            <i class="bi bi-gear"></i> Export Options
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="exportForm">
+                            <div class="mb-3">
+                                <label class="form-label">Export Type</label>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="export_choice" 
+                                           id="exportBoth" value="3" checked>
+                                    <label class="form-check-label" for="exportBoth">
+                                        <strong>Both Excel and Visual Reports</strong>
+                                        <small class="d-block text-muted">Comprehensive package (Recommended)</small>
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="export_choice" 
+                                           id="exportExcel" value="1">
+                                    <label class="form-check-label" for="exportExcel">
+                                        <strong>Excel Reports Only</strong>
+                                        <small class="d-block text-muted">Cut lists and summaries</small>
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="export_choice" 
+                                           id="exportVisual" value="2">
+                                    <label class="form-check-label" for="exportVisual">
+                                        <strong>Visual Reports Only</strong>
+                                        <small class="d-block text-muted">Apartment layout visualizations</small>
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary w-100" id="exportBtn" disabled>
+                                <span class="spinner-border spinner-border-sm d-none" id="exportSpinner"></span>
+                                <i class="bi bi-download me-2"></i>Export Selected Matching
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Right column: Preview and Progress -->
+            <div class="col-md-7">
+                <!-- Selected Matching Summary -->
+                <div class="card mb-4 d-none" id="matchingSummary">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">Selected Matching Summary</h5>
+                    </div>
+                    <div class="card-body">
+                        <h6 id="selectedMatchingName"></h6>
+                        <div class="summary-stats">
+                            <div class="stat-item">
+                                <h3 id="totalApartments">0</h3>
+                                <small class="text-muted">Apartments</small>
+                            </div>
+                            <div class="stat-item">
+                                <h3 id="totalPieces">0</h3>
+                                <small class="text-muted">Total Pieces</small>
+                            </div>
+                            <div class="stat-item">
+                                <h3 id="matchPercentage">0%</h3>
+                                <small class="text-muted">Match Rate</small>
+                            </div>
+                        </div>
+                        
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Apartment</th>
+                                        <th>Total</th>
+                                        <th>Matched</th>
+                                        <th>Match %</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="apartmentSummaryTable">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Export Progress -->
+                <div class="card d-none" id="exportProgress">
+                    <div class="card-header bg-light">
+                        <h5 class="mb-0">Export Progress</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="progress mb-3" style="height: 25px;">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                 role="progressbar" id="progressBar" style="width: 0%">0%</div>
+                        </div>
+                        <p class="text-muted mb-0" id="progressText">Preparing export...</p>
+                    </div>
+                </div>
+                
+                <!-- Download Section -->
+                <div class="card d-none" id="downloadSection">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0"><i class="bi bi-check-circle me-2"></i>Export Complete!</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-success">
+                            <h6>Export Summary:</h6>
+                            <ul class="mb-2">
+                                <li>Apartments processed: <span id="apartmentsProcessed">0</span></li>
+                                <li>Excel files created: <span id="excelFiles">0</span></li>
+                                <li>Visual reports created: <span id="visualReports">0</span></li>
+                            </ul>
+                        </div>
+                        <button class="btn btn-success btn-lg w-100" id="downloadBtn">
+                            <i class="bi bi-download me-2"></i>Download Export Package
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Initial placeholder -->
+                <div id="placeholderMessage" class="card">
+                    <div class="card-body">
+                        <div class="text-center py-5">
+                            <div class="display-1 text-muted mb-4">
+                                <i class="bi bi-file-earmark-zip"></i>
+                            </div>
+                            <h4>Export Reports</h4>
+                            <p class="text-muted">Select a matching result to export comprehensive documentation.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Alerts -->
+        <div class="alert alert-danger mt-3 d-none" id="errorAlert"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block prev_step %}
+<a href="{{ url_for('step8') }}" class="btn btn-secondary">Previous: Matching</a>
+{% endblock %}
+
+{% block next_step %}
+<button onclick="finishProject()" class="btn btn-primary" id="finishProjectBtn">
+    <span id="finishSpinner" class="spinner-border spinner-border-sm d-none me-2"></span>
+    Finish & Return to Home
+</button>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Elements
+    const matchingItems = document.querySelectorAll('.matching-item');
+    const exportForm = document.getElementById('exportForm');
+    const exportBtn = document.getElementById('exportBtn');
+    const exportSpinner = document.getElementById('exportSpinner');
+    const errorAlert = document.getElementById('errorAlert');
+    const exportProgress = document.getElementById('exportProgress');
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+    const downloadSection = document.getElementById('downloadSection');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const matchingSummary = document.getElementById('matchingSummary');
+    const placeholderMessage = document.getElementById('placeholderMessage');
+    
+    let selectedMatchingId = null;
+    let selectedMatchingData = null;
+    let exportData = null;
+    
+    // Matching item selection
+    matchingItems.forEach(item => {
+        item.addEventListener('click', function() {
+            // Remove selected class from all items
+            matchingItems.forEach(i => {
+                i.classList.remove('selected');
+                i.querySelector('.selected-icon').classList.add('d-none');
+            });
+            
+            // Add selected class to clicked item
+            this.classList.add('selected');
+            this.querySelector('.selected-icon').classList.remove('d-none');
+            
+            // Get matching ID and data from data attributes
+            selectedMatchingId = this.dataset.matchingId;
+            
+            // Parse the JSON data from attributes
+            try {
+                selectedMatchingData = {
+                    id: this.dataset.matchingId,
+                    name: this.dataset.matchingName,
+                    selected_apartments: JSON.parse(this.dataset.matchingApartments),
+                    apartment_summaries: JSON.parse(this.dataset.matchingSummaries)
+                };
+            } catch (e) {
+                console.error('Error parsing matching data:', e);
+                return;
+            }
+            
+            // Enable export button
+            exportBtn.disabled = false;
+            
+            // Update summary
+            updateMatchingSummary();
+        });
+    });
+    
+    // Update matching summary
+    function updateMatchingSummary() {
+        if (!selectedMatchingData) return;
+        
+        // Show summary, hide placeholder
+        matchingSummary.classList.remove('d-none');
+        placeholderMessage.classList.add('d-none');
+        
+        // Update name
+        document.getElementById('selectedMatchingName').textContent = selectedMatchingData.name;
+        
+        // Calculate overall stats
+        let totalPieces = 0;
+        let matchedPieces = 0;
+        const apartments = selectedMatchingData.selected_apartments;
+        
+        // Update apartment count
+        document.getElementById('totalApartments').textContent = apartments.length;
+        
+        // Build table and calculate totals
+        const tbody = document.getElementById('apartmentSummaryTable');
+        tbody.innerHTML = '';
+        
+        for (const apt of apartments) {
+            const summary = selectedMatchingData.apartment_summaries[apt];
+            if (summary) {
+                totalPieces += summary.total_pieces;
+                matchedPieces += summary.matched_pieces;
+                
+                const row = tbody.insertRow();
+                row.innerHTML = `
+                    <td>${apt}</td>
+                    <td>${summary.total_pieces}</td>
+                    <td>${summary.matched_pieces}</td>
+                    <td>
+                        <span class="badge bg-${summary.match_percentage >= 80 ? 'success' : 
+                                               summary.match_percentage >= 50 ? 'warning' : 'danger'}">
+                            ${summary.match_percentage}%
+                        </span>
+                    </td>
+                `;
+            }
+        }
+        
+        // Update totals
+        document.getElementById('totalPieces').textContent = totalPieces;
+        const percentage = totalPieces > 0 ? Math.round(matchedPieces / totalPieces * 100) : 0;
+        document.getElementById('matchPercentage').textContent = percentage + '%';
+    }
+    
+    // Form submission
+    exportForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        if (!selectedMatchingId) {
+            errorAlert.textContent = 'Please select a matching result to export';
+            errorAlert.classList.remove('d-none');
+            return;
+        }
+        
+        // Get form values
+        const exportChoice = document.querySelector('input[name="export_choice"]:checked').value;
+        
+        // Show loading state
+        exportBtn.disabled = true;
+        exportSpinner.classList.remove('d-none');
+        errorAlert.classList.add('d-none');
+        exportProgress.classList.remove('d-none');
+        downloadSection.classList.add('d-none');
+        
+        // Simulate progress
+        let progress = 0;
+        const progressInterval = setInterval(() => {
+            progress += 10;
+            if (progress > 90) {
+                clearInterval(progressInterval);
+            }
+            progressBar.style.width = progress + '%';
+            progressBar.textContent = progress + '%';
+            
+            // Update progress text
+            if (progress < 30) {
+                progressText.textContent = 'Creating Excel workbooks...';
+            } else if (progress < 60) {
+                progressText.textContent = 'Generating visual reports...';
+            } else {
+                progressText.textContent = 'Creating ZIP package...';
+            }
+        }, 200);
+        
+        // Send export request
+        fetch('/step9', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                matching_id: selectedMatchingId,
+                export_choice: exportChoice
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            // Clear progress interval
+            clearInterval(progressInterval);
+            
+            // Reset loading state
+            exportBtn.disabled = false;
+            exportSpinner.classList.add('d-none');
+            
+            if (data.error) {
+                errorAlert.textContent = data.error;
+                errorAlert.classList.remove('d-none');
+                exportProgress.classList.add('d-none');
+                return;
+            }
+            
+            // Complete progress
+            progressBar.style.width = '100%';
+            progressBar.textContent = '100%';
+            progressBar.classList.remove('progress-bar-animated');
+            progressBar.classList.add('bg-success');
+            progressText.textContent = 'Export completed successfully!';
+            
+            // Store export data
+            exportData = data;
+            
+            // Update summary
+            if (data.summary) {
+                document.getElementById('apartmentsProcessed').textContent = 
+                    data.summary.apartments_processed || 0;
+                document.getElementById('excelFiles').textContent = 
+                    data.summary.excel_files || 0;
+                document.getElementById('visualReports').textContent = 
+                    data.summary.visual_reports || 0;
+            }
+            
+            // Show download section after delay
+            setTimeout(() => {
+                downloadSection.classList.remove('d-none');
+            }, 500);
+        })
+        .catch(error => {
+            // Clear progress interval
+            clearInterval(progressInterval);
+            
+            // Reset loading state
+            exportBtn.disabled = false;
+            exportSpinner.classList.add('d-none');
+            
+            errorAlert.textContent = 'An error occurred during export: ' + error.message;
+            errorAlert.classList.remove('d-none');
+            exportProgress.classList.add('d-none');
+            console.error('Error:', error);
+        });
+    });
+    
+    // Download button
+    downloadBtn.addEventListener('click', function() {
+        if (!exportData || !exportData.zip_file) {
+            alert('Export data not available');
+            return;
+        }
+        
+        // Create blob from base64
+        const byteCharacters = atob(exportData.zip_file);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: 'application/zip' });
+        
+        // Create download link
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = exportData.filename || 'Tile_Matching_Export.zip';
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+    });
+});
+
+// NEW: Finish Project Function
+function finishProject() {
+    const finishBtn = document.getElementById('finishProjectBtn');
+    const spinner = document.getElementById('finishSpinner');
+    
+    // Show loading state
+    finishBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Finishing Project...';
+    finishBtn.disabled = true;
+    
+    // Call finish project API
+    fetch('/finish-project', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Show success message
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-success alert-dismissible fade show mt-3';
+            alert.innerHTML = `
+                <i class="bi bi-check-circle me-2"></i>
+                ${data.message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.querySelector('.card-body').appendChild(alert);
+            
+            // Redirect after delay
+            setTimeout(() => {
+                window.location.href = data.redirect;
+            }, 1500);
+        } else {
+            // Show error
+            alert('Error: ' + data.error);
+            finishBtn.innerHTML = '<span class="spinner-border spinner-border-sm d-none me-2"></span>Finish & Return to Home';
+            finishBtn.disabled = false;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error finishing project');
+        finishBtn.innerHTML = '<span class="spinner-border spinner-border-sm d-none me-2"></span>Finish & Return to Home';
+        finishBtn.disabled = false;
+    });
+}
+</script>
+{% endblock %}

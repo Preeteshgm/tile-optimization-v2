@@ -1,0 +1,353 @@
+{% extends "index.html" %}
+
+{% block progress_width %}42%{% endblock %}
+{% block progress_value %}42{% endblock %}
+{% block progress_text %}Step 3: Tile Coverage Generation{% endblock %}
+
+{% block step1_active %}completed{% endblock %}
+{% block step2_active %}completed{% endblock %}
+{% block step3_active %}active{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>Step 3: Tile Coverage Generation</h2>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-info">
+            <p>Configure tile layout parameters and generate the tile grid with explicit grout spacing.</p>
+        </div>
+        
+        <div class="row">
+            <!-- Left side: Configuration Form -->
+            <div class="col-md-6">
+                <form id="tileLayoutForm">
+                    <!-- Tile Size Configuration -->
+                    <div class="card mb-3">
+                        <div class="card-header">Tile Size Configuration</div>
+                        <div class="card-body">
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="radio" name="use_default_size" id="useDefaultSize" value="true" checked>
+                                <label class="form-check-label" for="useDefaultSize">
+                                    Use default from SP layer
+                                    {% if default_width and default_height %}
+                                        ({{ default_width }}mm × {{ default_height }}mm)
+                                    {% endif %}
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="use_default_size" id="useCustomSize" value="false">
+                                <label class="form-check-label" for="useCustomSize">
+                                    Use custom size
+                                </label>
+                            </div>
+                            
+                            <div class="row mt-3 d-none" id="customSizeInputs">
+                                <div class="col-md-6">
+                                    <label for="tileWidth">Width (mm):</label>
+                                    <input type="number" id="tileWidth" class="form-control" value="600" min="100" max="2000">
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="tileHeight">Height (mm):</label>
+                                    <input type="number" id="tileHeight" class="form-control" value="600" min="100" max="2000">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Grout Configuration -->
+                    <div class="card mb-3">
+                        <div class="card-header">Grout Configuration</div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label class="form-label">SP Layer Interpretation:</label>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="sp_includes_grout" id="spIncludesGroutYes" value="true" checked>
+                                    <label class="form-check-label" for="spIncludesGroutYes">
+                                        SP layer dimensions include grout (layout size)
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="sp_includes_grout" id="spIncludesGroutNo" value="false">
+                                    <label class="form-check-label" for="spIncludesGroutNo">
+                                        SP layer dimensions exclude grout (factory size)
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="groutThickness">Grout Thickness (mm):</label>
+                                <input type="number" id="groutThickness" class="form-control" value="3" min="0" max="10" step="0.5">
+                                <div class="form-text">Standard grout thickness is 3mm</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Layout Configuration -->
+                    <div class="card mb-3">
+                        <div class="card-header">Layout Configuration</div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label class="form-label">Layout Type:</label>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="layout_type" id="layoutStandard" value="standard" checked>
+                                    <label class="form-check-label" for="layoutStandard">
+                                        Standard (Grid Layout)
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="layout_type" id="layoutStaggered" value="staggered">
+                                    <label class="form-check-label" for="layoutStaggered">
+                                        Staggered (Brick Pattern)
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <div id="staggerOptions" class="d-none">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label for="staggerPercent">Stagger (%):</label>
+                                        <input type="number" id="staggerPercent" class="form-control" value="50" min="0" max="100" step="10">
+                                        <div class="form-text">50% = Brick pattern</div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label>Stagger Direction:</label>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="stagger_direction" id="staggerX" value="x" checked>
+                                            <label class="form-check-label" for="staggerX">X Direction</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="stagger_direction" id="staggerY" value="y">
+                                            <label class="form-check-label" for="staggerY">Y Direction</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" id="generateTileLayout" class="btn btn-primary w-100">
+                        <span class="spinner-border spinner-border-sm d-none" id="generateSpinner"></span>
+                        Generate Tile Layout
+                    </button>
+                </form>
+                
+                <div class="alert alert-danger mt-3 d-none" id="errorAlert"></div>
+                <div class="alert alert-success mt-3 d-none" id="successAlert"></div>
+            </div>
+            
+            <!-- Right side: Visualization -->
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h4>Generated Tile Layout</h4>
+                    </div>
+                    <div class="card-body">
+                        <div id="tileLayout" class="tile-layout-container text-center">
+                            <div class="alert alert-info">
+                                Configure parameters and click "Generate Tile Layout" to create the visualization.
+                            </div>
+                        </div>
+                        
+                        <div id="coverageInfo" class="mt-3 d-none">
+                            <h5>Coverage Information</h5>
+                            <div id="coverageStats"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Summary Statistics (shown after generation) -->
+                <div class="card mt-3 d-none" id="summaryCard">
+                    <div class="card-header">
+                        <h5>Tile Summary</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-6">
+                                <p><strong>Total Tiles:</strong> <span id="totalTiles">0</span></p>
+                                <p><strong>Full Tiles:</strong> <span id="fullTiles">0</span> (<span id="fullTilesPercentage">0</span>%)</p>
+                                <p><strong>Cut Tiles:</strong> <span id="cutTiles">0</span> (<span id="cutTilesPercentage">0</span>%)</p>
+                            </div>
+                            <div class="col-6">
+                                <p><strong>Tile Size:</strong> <span id="tileSize">-</span></p>
+                                <p><strong>Grout Thickness:</strong> <span id="groutThicknessDisplay">-</span></p>
+                                <p><strong>Layout Type:</strong> <span id="layoutTypeDisplay">-</span></p>
+                            </div>
+                        </div>
+                        <div class="mt-2">
+                            <p><strong>Average Coverage:</strong> <span id="averageCoverage">-</span>%</p>
+                            <div id="lowCoverageWarning" class="alert alert-warning mt-2 d-none">
+                                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                                <span id="lowCoverageCount">0</span> rooms have less than 99% coverage
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block prev_step %}
+<a href="{{ url_for('step2') }}" class="btn btn-secondary">Previous: Name Rooms</a>
+{% endblock %}
+
+{% block next_step %}
+<a id="nextStep" href="{{ url_for('step4') }}" class="btn btn-primary disabled">Next: Tile Analysis</a>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle custom size toggle
+    const customSizeRadio = document.getElementById('useCustomSize');
+    const defaultSizeRadio = document.getElementById('useDefaultSize');
+    const customSizeInputs = document.getElementById('customSizeInputs');
+    
+    customSizeRadio.addEventListener('change', function() {
+        if (this.checked) {
+            customSizeInputs.classList.remove('d-none');
+        }
+    });
+    
+    defaultSizeRadio.addEventListener('change', function() {
+        if (this.checked) {
+            customSizeInputs.classList.add('d-none');
+        }
+    });
+    
+    // Handle layout type toggle
+    const layoutStandard = document.getElementById('layoutStandard');
+    const layoutStaggered = document.getElementById('layoutStaggered');
+    const staggerOptions = document.getElementById('staggerOptions');
+    
+    layoutStaggered.addEventListener('change', function() {
+        if (this.checked) {
+            staggerOptions.classList.remove('d-none');
+        }
+    });
+    
+    layoutStandard.addEventListener('change', function() {
+        if (this.checked) {
+            staggerOptions.classList.add('d-none');
+        }
+    });
+    
+    // Generate tile layout
+    const tileLayoutForm = document.getElementById('tileLayoutForm');
+    const generateButton = document.getElementById('generateTileLayout');
+    const generateSpinner = document.getElementById('generateSpinner');
+    const errorAlert = document.getElementById('errorAlert');
+    const successAlert = document.getElementById('successAlert');
+    const tileLayout = document.getElementById('tileLayout');
+    const nextStep = document.getElementById('nextStep');
+    const summaryCard = document.getElementById('summaryCard');
+    const coverageInfo = document.getElementById('coverageInfo');
+    const coverageStats = document.getElementById('coverageStats');
+    
+    tileLayoutForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        // Show loading
+        generateSpinner.classList.remove('d-none');
+        errorAlert.classList.add('d-none');
+        successAlert.classList.add('d-none');
+        generateButton.disabled = true;
+        
+        // Gather form data
+        const formData = {
+            use_default_size: document.querySelector('input[name="use_default_size"]:checked').value === 'true',
+            sp_includes_grout: document.querySelector('input[name="sp_includes_grout"]:checked').value === 'true',
+            grout_thickness: parseFloat(document.getElementById('groutThickness').value),
+            layout_type: document.querySelector('input[name="layout_type"]:checked').value
+        };
+        
+        // Add custom size if selected
+        if (!formData.use_default_size) {
+            formData.tile_width = parseFloat(document.getElementById('tileWidth').value);
+            formData.tile_height = parseFloat(document.getElementById('tileHeight').value);
+        }
+        
+        // Add stagger options if staggered layout
+        if (formData.layout_type === 'staggered') {
+            formData.stagger_percent = parseFloat(document.getElementById('staggerPercent').value) / 100;
+            formData.stagger_direction = document.querySelector('input[name="stagger_direction"]:checked').value;
+        } else {
+            formData.stagger_percent = 0;
+            formData.stagger_direction = 'x';
+        }
+        
+        // Send request
+        fetch('/step3', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(formData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            // Hide loading
+            generateSpinner.classList.add('d-none');
+            generateButton.disabled = false;
+            
+            if (data.error) {
+                errorAlert.textContent = data.error;
+                errorAlert.classList.remove('d-none');
+            } else {
+                // Show success
+                successAlert.textContent = 'Tile layout generated successfully!';
+                successAlert.classList.remove('d-none');
+                
+                // Display tile plot
+                if (data.tile_plot) {
+                    const img = document.createElement('img');
+                    img.src = 'data:image/png;base64,' + data.tile_plot;
+                    img.alt = 'Tile Layout';
+                    img.className = 'img-fluid';
+                    
+                    tileLayout.innerHTML = '';
+                    tileLayout.appendChild(img);
+                }
+                
+                // Show summary
+                if (data.summary) {
+                    summaryCard.classList.remove('d-none');
+                    
+                    // Update summary values
+                    document.getElementById('totalTiles').textContent = data.summary.total_tiles || 0;
+                    document.getElementById('fullTiles').textContent = data.summary.full_tiles || 0;
+                    document.getElementById('fullTilesPercentage').textContent = data.summary.full_tiles_percentage || 0;
+                    document.getElementById('cutTiles').textContent = data.summary.cut_tiles || 0;
+                    document.getElementById('cutTilesPercentage').textContent = data.summary.cut_tiles_percentage || 0;
+                    document.getElementById('tileSize').textContent = data.summary.tile_size || '-';
+                    document.getElementById('groutThicknessDisplay').textContent = data.summary.grout_thickness || '-';
+                    document.getElementById('layoutTypeDisplay').textContent = data.summary.layout_type || '-';
+                    document.getElementById('averageCoverage').textContent = data.summary.average_coverage || '-';
+                    
+                    // Show low coverage warning if needed
+                    if (data.summary.low_coverage_rooms > 0) {
+                        document.getElementById('lowCoverageWarning').classList.remove('d-none');
+                        document.getElementById('lowCoverageCount').textContent = data.summary.low_coverage_rooms;
+                    } else {
+                        document.getElementById('lowCoverageWarning').classList.add('d-none');
+                    }
+                }
+                
+                // Enable next step
+                nextStep.classList.remove('disabled');
+            }
+        })
+        .catch(error => {
+            // Hide loading
+            generateSpinner.classList.add('d-none');
+            generateButton.disabled = false;
+            
+            errorAlert.textContent = 'Network error: ' + error.message;
+            errorAlert.classList.remove('d-none');
+        });
+    });
+});
+</script>
+{% endblock %}

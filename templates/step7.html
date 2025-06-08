@@ -1,0 +1,490 @@
+{% extends "index.html" %}
+
+{% block progress_width %}100%{% endblock %}
+{% block progress_value %}100{% endblock %}
+{% block progress_text %}Step 7: Data Preparation for Optimization{% endblock %}
+
+{% block step1_active %}completed{% endblock %}
+{% block step2_active %}completed{% endblock %}
+{% block step3_active %}completed{% endblock %}
+{% block step4_active %}completed{% endblock %}
+{% block step5_active %}completed{% endblock %}
+{% block step6_active %}completed{% endblock %}
+{% block step7_active %}active{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>Step 7: Prepare Data for Optimization</h2>
+    </div>
+    <div class="card-body">
+        <!-- Data Preparation Status -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div id="loadingSection" class="text-center">
+                    <div class="spinner-border text-primary mb-3" role="status">
+                        <span class="sr-only">Loading...</span>
+                    </div>
+                    <p>Analyzing cut pieces and organizing by size...</p>
+                </div>
+                
+                <div id="dataReadySection" class="d-none">
+                    <div class="alert alert-success mb-4">
+                        <div class="d-flex align-items-center">
+                            <i class="bi bi-check-circle fs-3 me-3"></i>
+                            <div>
+                                <h5 class="mb-1">Apartment Data Prepared Successfully!</h5>
+                                <p class="mb-0">Cut pieces have been analyzed and organized by size.</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Data Summary Cards -->
+                    <div class="row mb-4">
+                        <div class="col-md-4">
+                            <div class="card text-center">
+                                <div class="card-body">
+                                    <i class="bi bi-grid-3x3 fs-3 text-primary mb-2"></i>
+                                    <h6 class="text-muted">Total Apartment Pieces</h6>
+                                    <h3 class="text-primary mb-0" id="apartmentPieces">0</h3>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card text-center">
+                                <div class="card-body">
+                                    <i class="bi bi-rulers fs-3 text-info mb-2"></i>
+                                    <h6 class="text-muted">Half-tile Threshold</h6>
+                                    <h3 class="text-info mb-0" id="halfThreshold">0mm</h3>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card text-center">
+                                <div class="card-body">
+                                    <i class="bi bi-layers fs-3 text-success mb-2"></i>
+                                    <h6 class="text-muted">Pattern Mode</h6>
+                                    <h3 class="text-success mb-0" id="patternMode">-</h3>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Pattern Details -->
+                    <div id="patternDetails" class="card mb-4 d-none">
+                        <div class="card-body">
+                            <h6 class="card-title mb-3">Cut Pieces Breakdown</h6>
+                            <div id="patternSummary"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Inventory Section -->
+        <div id="inventorySection" class="d-none">
+            <div class="row">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header bg-light">
+                            <h5 class="mb-0">
+                                <i class="bi bi-box-seam me-2"></i>
+                                Inventory Configuration (Optional)
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <p class="mb-4">Include existing inventory pieces for better optimization results.</p>
+                            
+                            <!-- Radio Options -->
+                            <div class="row mb-4">
+                                <div class="col-md-6">
+                                    <div class="form-check p-3 border rounded h-100">
+                                        <input class="form-check-input" type="radio" name="inventoryOption" 
+                                               id="noInventory" value="none" checked>
+                                        <label class="form-check-label ms-2" for="noInventory">
+                                            <strong>No Inventory</strong>
+                                            <p class="text-muted mb-0 mt-1">
+                                                Proceed with apartment pieces only
+                                            </p>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-check p-3 border rounded h-100">
+                                        <input class="form-check-input" type="radio" name="inventoryOption" 
+                                               id="uploadInventory" value="upload">
+                                        <label class="form-check-label ms-2" for="uploadInventory">
+                                            <strong>Upload Inventory</strong>
+                                            <p class="text-muted mb-0 mt-1">
+                                                Include existing inventory data
+                                            </p>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Upload Section -->
+                            <div id="inventoryUploadSection" class="d-none">
+                                <div class="alert alert-info mb-3">
+                                    <h6 class="alert-heading">
+                                        <i class="bi bi-info-circle me-2"></i>Instructions
+                                    </h6>
+                                    <ol class="mb-0">
+                                        <li>Download the Excel template</li>
+                                        <li>Fill in your inventory data</li>
+                                        <li>Upload the completed file</li>
+                                    </ol>
+                                </div>
+                                
+                                <div class="row align-items-end mb-3">
+                                    <div class="col-md-4">
+                                        <label class="form-label">Step 1: Get Template</label>
+                                        <button class="btn btn-outline-secondary w-100" id="downloadTemplateBtn">
+                                            <i class="bi bi-download me-2"></i>Download Template
+                                        </button>
+                                    </div>
+                                    <div class="col-md-5">
+                                        <label class="form-label">Step 2: Select Completed File</label>
+                                        <input type="file" class="form-control" id="inventoryFile" 
+                                               accept=".xlsx,.xls">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label">Step 3: Upload</label>
+                                        <button class="btn btn-primary w-100" id="uploadInventoryBtn" disabled>
+                                            <span class="spinner-border spinner-border-sm d-none" id="uploadSpinner"></span>
+                                            <i class="bi bi-upload me-2"></i>Upload
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <div id="templateInfo" class="alert alert-warning d-none">
+                                    <small>
+                                        <strong>Template Format:</strong><br>
+                                        <span id="templateFormatInfo"></span>
+                                    </small>
+                                </div>
+                            </div>
+                            
+                            <!-- Status Messages -->
+                            <div id="inventoryStatus" class="alert d-none"></div>
+                            
+                            <!-- Finalize Button -->
+                            <div class="text-center mt-4">
+                                <button class="btn btn-success btn-lg" id="finalizeDataBtn">
+                                    <span class="spinner-border spinner-border-sm d-none" id="finalizeSpinner"></span>
+                                    <i class="bi bi-check-circle me-2"></i>
+                                    Finalize Data for Optimization
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Final Summary -->
+        <div id="finalSummarySection" class="d-none">
+            <div class="alert alert-success">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        <h5 class="mb-2">
+                            <i class="bi bi-check-circle-fill me-2"></i>
+                            Data Ready for Optimization!
+                        </h5>
+                        <p class="mb-0">All cut pieces have been prepared for the matching algorithm.</p>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="row text-center">
+                            <div class="col-4">
+                                <h6 class="text-muted mb-0">Total</h6>
+                                <h4 class="mb-0" id="totalPieces">0</h4>
+                            </div>
+                            <div class="col-4">
+                                <h6 class="text-muted mb-0">Apartment</h6>
+                                <h4 class="mb-0" id="finalApartmentPieces">0</h4>
+                            </div>
+                            <div class="col-4">
+                                <h6 class="text-muted mb-0">Inventory</h6>
+                                <h4 class="mb-0" id="finalInventoryPieces">0</h4>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block prev_step %}
+<a href="{{ url_for('step6') }}" class="btn btn-secondary">Previous: Small Tiles</a>
+{% endblock %}
+
+{% block next_step %}
+<a id="nextStep" href="{{ url_for('step8') }}" class="btn btn-primary disabled">Next: Cut Piece Matching</a>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-prepare data on page load
+    prepareApartmentData();
+    
+    // Elements
+    const inventoryOptions = document.querySelectorAll('input[name="inventoryOption"]');
+    const inventoryUploadSection = document.getElementById('inventoryUploadSection');
+    const downloadTemplateBtn = document.getElementById('downloadTemplateBtn');
+    const inventoryFile = document.getElementById('inventoryFile');
+    const uploadInventoryBtn = document.getElementById('uploadInventoryBtn');
+    const uploadSpinner = document.getElementById('uploadSpinner');
+    const finalizeDataBtn = document.getElementById('finalizeDataBtn');
+    const finalizeSpinner = document.getElementById('finalizeSpinner');
+    const nextStep = document.getElementById('nextStep');
+    const inventoryStatus = document.getElementById('inventoryStatus');
+    
+    // Handle inventory option changes
+    inventoryOptions.forEach(option => {
+        option.addEventListener('change', function() {
+            if (this.value === 'upload') {
+                inventoryUploadSection.classList.remove('d-none');
+                document.getElementById('templateInfo').classList.remove('d-none');
+            } else {
+                inventoryUploadSection.classList.add('d-none');
+                document.getElementById('templateInfo').classList.add('d-none');
+                clearStatus();
+            }
+        });
+    });
+    
+    // Enable upload button when file is selected
+    inventoryFile.addEventListener('change', function() {
+        uploadInventoryBtn.disabled = !this.files.length;
+        if (!this.files.length) {
+            clearStatus();
+        }
+    });
+    
+    // Download template
+    downloadTemplateBtn.addEventListener('click', function() {
+        fetch('/step7', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'download_template' })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.template_file) {
+                const blob = base64ToBlob(data.template_file, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = data.filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                showStatus('info', 'Template downloaded! Please fill it with your inventory data.');
+            }
+        })
+        .catch(error => {
+            showStatus('danger', 'Failed to download template: ' + error.message);
+        });
+    });
+    
+    // Upload inventory
+    uploadInventoryBtn.addEventListener('click', function() {
+        if (!inventoryFile.files.length) return;
+        
+        uploadSpinner.classList.remove('d-none');
+        uploadInventoryBtn.disabled = true;
+        
+        const formData = new FormData();
+        formData.append('inventory_file', inventoryFile.files[0]);
+        formData.append('action', 'upload_inventory');
+        
+        fetch('/step7', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            uploadSpinner.classList.add('d-none');
+            uploadInventoryBtn.disabled = false;
+            
+            if (data.success) {
+                showStatus('success', 'Inventory uploaded successfully!');
+                uploadInventoryBtn.innerHTML = '<i class="bi bi-check-circle me-2"></i>Uploaded';
+                uploadInventoryBtn.classList.remove('btn-primary');
+                uploadInventoryBtn.classList.add('btn-success');
+            } else {
+                showStatus('danger', data.error || 'Failed to upload inventory');
+            }
+        })
+        .catch(error => {
+            uploadSpinner.classList.add('d-none');
+            uploadInventoryBtn.disabled = false;
+            showStatus('danger', 'Upload failed: ' + error.message);
+        });
+    });
+    
+    // Finalize data
+    finalizeDataBtn.addEventListener('click', function() {
+        const selectedOption = document.querySelector('input[name="inventoryOption"]:checked').value;
+        
+        finalizeSpinner.classList.remove('d-none');
+        finalizeDataBtn.disabled = true;
+        
+        // Check if inventory upload is selected but not uploaded
+        if (selectedOption === 'upload' && !inventoryStatus.classList.contains('alert-success')) {
+            showStatus('warning', 'Please upload inventory file first');
+            finalizeSpinner.classList.add('d-none');
+            finalizeDataBtn.disabled = false;
+            return;
+        }
+        
+        finalizeData(selectedOption === 'upload');
+    });
+    
+    function prepareApartmentData() {
+        fetch('/step7', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'prepare_apartment_data' })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Hide loading, show data
+                document.getElementById('loadingSection').classList.add('d-none');
+                document.getElementById('dataReadySection').classList.remove('d-none');
+                
+                // Update summary
+                document.getElementById('apartmentPieces').textContent = data.apartment_pieces;
+                document.getElementById('halfThreshold').textContent = data.half_threshold + 'mm';
+                document.getElementById('patternMode').textContent = data.has_pattern ? 'Yes' : 'No';
+                
+                // Show pattern details if applicable
+                if (data.has_pattern) {
+                    document.getElementById('patternDetails').classList.remove('d-none');
+                    document.getElementById('patternSummary').innerHTML = `
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6 class="text-muted">X Direction Cuts</h6>
+                                <div class="d-flex justify-content-between">
+                                    <span>Less than half:</span>
+                                    <strong>${data.x_less_count}</strong>
+                                </div>
+                                <div class="d-flex justify-content-between">
+                                    <span>More than half:</span>
+                                    <strong>${data.x_more_count}</strong>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6 class="text-muted">Y Direction Cuts</h6>
+                                <div class="d-flex justify-content-between">
+                                    <span>Less than half:</span>
+                                    <strong>${data.y_less_count}</strong>
+                                </div>
+                                <div class="d-flex justify-content-between">
+                                    <span>More than half:</span>
+                                    <strong>${data.y_more_count}</strong>
+                                </div>
+                            </div>
+                        </div>`;
+                    
+                    document.getElementById('templateFormatInfo').textContent = 
+                        'Pattern mode: Template will have separate sheets for X and Y inventory';
+                } else {
+                    document.getElementById('patternDetails').classList.remove('d-none');
+                    document.getElementById('patternSummary').innerHTML = `
+                        <div class="text-center">
+                            <div class="row">
+                                <div class="col-6">
+                                    <span class="text-muted">Less than half:</span>
+                                    <strong class="ms-2">${data.all_less_count}</strong>
+                                </div>
+                                <div class="col-6">
+                                    <span class="text-muted">More than half:</span>
+                                    <strong class="ms-2">${data.all_more_count}</strong>
+                                </div>
+                            </div>
+                        </div>`;
+                    
+                    document.getElementById('templateFormatInfo').textContent = 
+                        'No pattern mode: Template will have a single sheet for all inventory';
+                }
+                
+                // Show inventory section
+                document.getElementById('inventorySection').classList.remove('d-none');
+            }
+        })
+        .catch(error => {
+            document.getElementById('loadingSection').innerHTML = 
+                '<div class="alert alert-danger">Failed to prepare data: ' + error.message + '</div>';
+        });
+    }
+    
+    function finalizeData(hasInventory) {
+        fetch('/step7', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                action: 'finalize_data',
+                has_inventory: hasInventory
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Update final summary
+                document.getElementById('totalPieces').textContent = data.total_pieces;
+                document.getElementById('finalApartmentPieces').textContent = data.apartment_pieces;
+                document.getElementById('finalInventoryPieces').textContent = data.inventory_pieces;
+                
+                // Show final summary
+                document.getElementById('finalSummarySection').classList.remove('d-none');
+                
+                // Enable next button
+                nextStep.classList.remove('disabled');
+                
+                // Update finalize button
+                finalizeSpinner.classList.add('d-none');
+                finalizeDataBtn.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i>Data Ready';
+                finalizeDataBtn.classList.remove('btn-success');
+                finalizeDataBtn.classList.add('btn-secondary');
+                finalizeDataBtn.disabled = true;
+                
+                // Hide inventory section for cleaner look
+                document.getElementById('inventorySection').classList.add('d-none');
+            }
+        })
+        .catch(error => {
+            finalizeSpinner.classList.add('d-none');
+            finalizeDataBtn.disabled = false;
+            showStatus('danger', 'Failed to finalize data: ' + error.message);
+        });
+    }
+    
+    function showStatus(type, message) {
+        inventoryStatus.className = `alert alert-${type}`;
+        inventoryStatus.innerHTML = message;
+        inventoryStatus.classList.remove('d-none');
+    }
+    
+    function clearStatus() {
+        inventoryStatus.classList.add('d-none');
+    }
+    
+    function base64ToBlob(base64, mimeType) {
+        const byteCharacters = atob(base64);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        return new Blob([byteArray], { type: mimeType });
+    }
+});
+</script>
+{% endblock %}

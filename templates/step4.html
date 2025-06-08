@@ -1,0 +1,190 @@
+{% extends "index.html" %}
+
+{% block progress_width %}56%{% endblock %}
+{% block progress_value %}56{% endblock %}
+{% block progress_text %}Step 4: Tile Analysis{% endblock %}
+
+{% block step1_active %}completed{% endblock %}
+{% block step2_active %}completed{% endblock %}
+{% block step3_active %}completed{% endblock %}
+{% block step4_active %}active{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>Step 4: Complete Tile Analysis</h2>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-info">
+            <p>Analyze tiles for MultiPolygons and irregular tiles. The system will automatically detect and handle any issues.</p>
+        </div>
+        
+        <div class="row">
+            <!-- Left side: Analysis Control -->
+            <div class="col-md-6">
+                <div class="card mb-4">
+                    <div class="card-header">Analysis Configuration</div>
+                    <div class="card-body">
+                        <div class="alert alert-warning">
+                            <h6>Automatic Analysis:</h6>
+                            <ul class="mb-0">
+                                <li><strong>MultiPolygon Detection:</strong> Automatically split into individual tiles</li>
+                                <li><strong>Small Irregular Tiles:</strong> Detect tiles with area &lt; 1% of average</li>
+                            </ul>
+                        </div>
+                        
+                        <button type="button" class="btn btn-primary w-100" id="runAnalysisBtn">
+                            <span class="spinner-border spinner-border-sm d-none" id="analysisSpinner"></span>
+                            Run Tile Analysis
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Analysis Results Summary (initially hidden) -->
+                <div class="card d-none" id="resultsSummary">
+                    <div class="card-header">Analysis Results</div>
+                    <div class="card-body">
+                        <div id="summaryContent">
+                            <!-- Summary will be populated here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Right side: Visualizations -->
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h4>Analysis Visualization</h4>
+                    </div>
+                    <div class="card-body">
+                        <div id="analysisPlot" class="text-center">
+                            <div class="alert alert-info">
+                                Click "Run Tile Analysis" to analyze tiles for issues.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- MultiPolygon Results (initially hidden) -->
+                <div class="card mt-3 d-none" id="multipolygonResults">
+                    <div class="card-header">MultiPolygon Processing</div>
+                    <div class="card-body">
+                        <p><strong>MultiPolygons Found:</strong> <span id="mpFound">0</span></p>
+                        <p><strong>Split into:</strong> <span id="mpSplit">0</span> individual tiles</p>
+                    </div>
+                </div>
+                
+                <!-- Small Tiles Results (initially hidden) -->
+                <div class="card mt-3 d-none" id="smallTilesResults">
+                    <div class="card-header">Small Irregular Tiles</div>
+                    <div class="card-body">
+                        <p><strong>Small Irregular Tiles Found:</strong> <span id="smallIrregularCount">0</span></p>
+                        <p><strong>Threshold:</strong> Area &lt; 1% of average tile area</p>
+                        <p class="text-info mb-0"><small>These tiles are classified but NOT removed</small></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="alert alert-success mt-3 d-none" id="successAlert"></div>
+        <div class="alert alert-danger mt-3 d-none" id="errorAlert"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block prev_step %}
+<a href="{{ url_for('step3') }}" class="btn btn-secondary">Previous: Tile Coverage</a>
+{% endblock %}
+
+{% block next_step %}
+<a id="nextStep" href="{{ url_for('step5') }}" class="btn btn-primary disabled">Next: Classification</a>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const runAnalysisBtn = document.getElementById('runAnalysisBtn');
+    const analysisSpinner = document.getElementById('analysisSpinner');
+    const errorAlert = document.getElementById('errorAlert');
+    const successAlert = document.getElementById('successAlert');
+    const resultsSummary = document.getElementById('resultsSummary');
+    const summaryContent = document.getElementById('summaryContent');
+    const multipolygonResults = document.getElementById('multipolygonResults');
+    const smallTilesResults = document.getElementById('smallTilesResults');
+    const nextStep = document.getElementById('nextStep');
+    
+    runAnalysisBtn.addEventListener('click', function() {
+        // Show loading
+        runAnalysisBtn.disabled = true;
+        analysisSpinner.classList.remove('d-none');
+        errorAlert.classList.add('d-none');
+        successAlert.classList.add('d-none');
+        
+        // Run analysis
+        fetch('/step4', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({})
+        })
+        .then(response => response.json())
+        .then(data => {
+            // Hide loading
+            runAnalysisBtn.disabled = false;
+            analysisSpinner.classList.add('d-none');
+            
+            if (data.error) {
+                errorAlert.textContent = data.error;
+                errorAlert.classList.remove('d-none');
+            } else {
+                successAlert.textContent = 'Tile analysis completed successfully!';
+                successAlert.classList.remove('d-none');
+                
+                // Show results summary
+                resultsSummary.classList.remove('d-none');
+                
+                // Update summary content
+                if (data.summary) {
+                    let summaryHtml = `
+                        <p><strong>Total Tiles:</strong> ${data.summary.total_tiles}</p>
+                        <p><strong>Full Tiles:</strong> ${data.summary.full_tiles}</p>
+                        <p><strong>Cut Tiles:</strong> ${data.summary.cut_tiles}</p>
+                        <p><strong>Irregular Tiles:</strong> ${data.summary.irregular_tiles}</p>
+                    `;
+                    
+                    if (data.summary.split_tiles > 0) {
+                        summaryHtml += `<p><strong>Split Tiles:</strong> ${data.summary.split_tiles}</p>`;
+                    }
+                    
+                    summaryContent.innerHTML = summaryHtml;
+                    
+                    // Show MultiPolygon results if any
+                    if (data.summary.multipolygons_found > 0) {
+                        multipolygonResults.classList.remove('d-none');
+                        document.getElementById('mpFound').textContent = data.summary.multipolygons_found;
+                        document.getElementById('mpSplit').textContent = data.summary.multipolygons_split || 0;
+                    }
+                    
+                    // Show small tiles results if any
+                    if (data.summary.small_irregular_tiles > 0) {
+                        smallTilesResults.classList.remove('d-none');
+                        document.getElementById('smallIrregularCount').textContent = data.summary.small_irregular_tiles;
+                    }
+                }
+                
+                // Enable next step
+                nextStep.classList.remove('disabled');
+            }
+        })
+        .catch(error => {
+            runAnalysisBtn.disabled = false;
+            analysisSpinner.classList.add('d-none');
+            errorAlert.textContent = 'An error occurred: ' + error.message;
+            errorAlert.classList.remove('d-none');
+        });
+    });
+});
+</script>
+{% endblock %}
