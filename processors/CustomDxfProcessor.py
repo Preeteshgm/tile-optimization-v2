@@ -98,7 +98,7 @@ class CustomDxfProcessor:
             graph[b].add(a)
         return graph
 
-    def find_closed_loops(self, graph, max_depth=30):
+    def find_closed_loops(self, graph, max_depth=50):
         visited_edges = set()
         loops = []
 

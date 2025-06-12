@@ -10,3 +10,59 @@ python run_server.py
 
 deactivate
 
+==========
+Make it run permanently in background:
+1. Stop the current app:
+bashCtrl+C
+2. Run it in background with nohup:
+bashsudo nohup ./venv/bin/python run_server.py > app.log 2>&1 &
+3. Check it's running:
+bashps aux | grep python
+You should see your Python process running.
+4. Exit PuTTY and test:
+Close PuTTY completely and test http://139.185.44.125/ - it should still work!
+📋 Useful commands for management:
+To stop the app:
+bashsudo pkill -f run_server.py
+To check if it's running:
+bashps aux | grep python
+To see the logs:
+bashtail -f app.log
+To restart after updates:
+bashsudo pkill -f run_server.py
+sudo nohup ./venv/bin/python run_server.py > app.log 2>&1 &
+Run the nohup command now and then close PuTTY to test! 🎯RetryIA^C(venv) ubuntu@tile-optimization-app:~/tile-optimization-v2$ sudo nohup ./venv/bin/python run_server.py > app.log 2>&1 &
+[1] 105561
+(venv) ubuntu@tile-optimization-app:~/tile-optimization-v2$ ps aux | grep python
+root      105561  0.0  0.4  11052  4668 pts/0    S    10:41   0:00 sudo nohup ./venv/bin/python run_server.py
+root      105562 54.1 17.3 992596 168960 pts/0   Sl   10:41   0:04 ./venv/bin/python run_server.py
+ubuntu    105575  0.0  0.0   8168   720 pts/0    S+   10:42   0:00 grep --color=auto pythonEditPerfect! 🎉 Your app is now running in the background as a daemon!
+✅ Success! Your app is running permanently:
+I can see:
+
+Process ID 105562 - Your Python app is running
+It's using 17.3% memory - actively serving requests
+Running as root - can use port 80
+
+🌐 Test it:
+
+Close PuTTY completely
+Open your browser
+Go to: http://139.185.44.125/
+It should still work!
+
+📋 Management commands for future:
+To stop the app:
+bashsudo pkill -f run_server.py
+To check if running:
+bashps aux | grep python
+To restart after code updates:
+bashgit pull
+sudo pkill -f run_server.py
+sudo nohup ./venv/bin/python run_server.py > app.log 2>&1 &
+To see logs:
+bashtail -f app.log
+Your tile optimization app is now running 24/7 until you manually stop it!
+Close PuTTY and test the website - it should stay online! 🚀
+
+==========
