@@ -865,17 +865,13 @@ class MatchingProcessor:
         ])
 
     def process_cut_pieces_matching(self, cut_pieces_by_half, tolerance_ranges):
-        """Main function to process cut pieces matching"""
-        print(f"\n🧩 Starting matching process...")
+        """Enhanced with two-stage matching - Priority 1&2, then Priority 3"""
+        
+        # === STAGE 1: EXISTING PRIORITY 1 & 2 MATCHING ===
+        print(f"\n🧩 STAGE 1: Priority 1 & 2 Matching...")
         
         has_pattern = cut_pieces_by_half['has_pattern']
-        has_inventory = False
-        
-        # Check if inventory data is available
-        for key in cut_pieces_by_half.keys():
-            if 'inv' in key:
-                has_inventory = True
-                break
+        has_inventory = any('inv' in key for key in cut_pieces_by_half.keys())
         
         print(f"Has inventory: {has_inventory}")
         
@@ -889,7 +885,7 @@ class MatchingProcessor:
             x_less_than_half = cut_pieces_by_half['x_less_than_half']
             x_more_than_half = cut_pieces_by_half['x_more_than_half']
             
-            # X Inventory matching
+            # X Inventory matching (Priority 1)
             x_inv_matches_df = pd.DataFrame()
             if has_inventory and not x_less_than_half.empty:
                 x_inv_less = cut_pieces_by_half.get('x_inv_less_than_half', pd.DataFrame())
@@ -915,7 +911,7 @@ class MatchingProcessor:
             else:
                 x_less_after_inv = self.expand_dataframe(x_less_than_half) if not x_less_than_half.empty else []
             
-            # X Apartment matching
+            # X Apartment matching (Priority 2)
             x_apt_matches_df = pd.DataFrame()
             x_unmatched_less_df = pd.DataFrame()
             x_unmatched_more_df = pd.DataFrame()
@@ -927,8 +923,8 @@ class MatchingProcessor:
                 
                 x_apt_matches, x_unmatched_less, x_unmatched_more = self.match_with_progressive_tolerance(
                     x_less_after_inv, x_more_expanded, tolerance_ranges, "X")
-                x_apt_matches_df = pd.DataFrame(x_apt_matches)
                 
+                x_apt_matches_df = pd.DataFrame(x_apt_matches)
                 x_unmatched_less_df = self.create_unmatched_summary(x_unmatched_less)
                 x_unmatched_more_df = self.create_unmatched_summary(x_unmatched_more)
                 print(f"Found {len(x_apt_matches_df)} X-Apartment matches")
@@ -938,7 +934,7 @@ class MatchingProcessor:
             results['x_unmatched_less_df'] = x_unmatched_less_df
             results['x_unmatched_more_df'] = x_unmatched_more_df
             
-            # Process Y direction (similar to X)
+            # Process Y direction
             print("\n🔄 Processing Cut Y Tiles:")
             y_less_than_half = cut_pieces_by_half['y_less_than_half']
             y_more_than_half = cut_pieces_by_half['y_more_than_half']
@@ -969,7 +965,7 @@ class MatchingProcessor:
             else:
                 y_less_after_inv = self.expand_dataframe(y_less_than_half) if not y_less_than_half.empty else []
             
-            # Y Apartment matching
+            # Y Apartment matching (Priority 2)
             y_apt_matches_df = pd.DataFrame()
             y_unmatched_less_df = pd.DataFrame()
             y_unmatched_more_df = pd.DataFrame()
@@ -981,8 +977,8 @@ class MatchingProcessor:
                 
                 y_apt_matches, y_unmatched_less, y_unmatched_more = self.match_with_progressive_tolerance(
                     y_less_after_inv, y_more_expanded, tolerance_ranges, "Y")
-                y_apt_matches_df = pd.DataFrame(y_apt_matches)
                 
+                y_apt_matches_df = pd.DataFrame(y_apt_matches)
                 y_unmatched_less_df = self.create_unmatched_summary(y_unmatched_less)
                 y_unmatched_more_df = self.create_unmatched_summary(y_unmatched_more)
                 print(f"Found {len(y_apt_matches_df)} Y-Apartment matches")
@@ -995,7 +991,6 @@ class MatchingProcessor:
         else:
             print("\n📋 Processing No Pattern Mode (All cuts)...")
             
-            # Process all direction
             all_less_than_half = cut_pieces_by_half['all_less_than_half']
             all_more_than_half = cut_pieces_by_half['all_more_than_half']
             
@@ -1025,7 +1020,7 @@ class MatchingProcessor:
             else:
                 all_less_after_inv = self.expand_dataframe(all_less_than_half) if not all_less_than_half.empty else []
             
-            # All Apartment matching
+            # All Apartment matching (Priority 2)
             all_apt_matches_df = pd.DataFrame()
             all_unmatched_less_df = pd.DataFrame()
             all_unmatched_more_df = pd.DataFrame()
@@ -1037,8 +1032,8 @@ class MatchingProcessor:
                 
                 all_apt_matches, all_unmatched_less, all_unmatched_more = self.match_with_progressive_tolerance(
                     all_less_after_inv, all_more_expanded, tolerance_ranges, "All")
-                all_apt_matches_df = pd.DataFrame(all_apt_matches)
                 
+                all_apt_matches_df = pd.DataFrame(all_apt_matches)
                 all_unmatched_less_df = self.create_unmatched_summary(all_unmatched_less)
                 all_unmatched_more_df = self.create_unmatched_summary(all_unmatched_more)
                 print(f"Found {len(all_apt_matches_df)} All-Apartment matches")
@@ -1047,6 +1042,11 @@ class MatchingProcessor:
             results['all_inv_matches_df'] = all_inv_matches_df
             results['all_unmatched_less_df'] = all_unmatched_less_df
             results['all_unmatched_more_df'] = all_unmatched_more_df
+        
+        # === STAGE 2: PRIORITY 3 ENHANCEMENT ===
+        print(f"\n🧩 STAGE 2: Priority 3 Matching...")
+        
+        results = self.enhance_with_priority3(results, cut_pieces_by_half, tolerance_ranges)
         
         return results
 
@@ -1134,3 +1134,307 @@ class MatchingProcessor:
                     print(f"✅ Created all inventory report with {len(all_inv_report)} rows")
         
         return clean_tables
+    
+    def enhance_with_priority3(self, existing_results, cut_pieces_by_half, tolerance_ranges):
+        """Enhance existing results with Priority 3 matches"""
+        
+        has_pattern = cut_pieces_by_half['has_pattern']
+        
+        if has_pattern:
+            # X Direction Priority 3
+            x_unmatched = existing_results.get('x_unmatched_less_df', pd.DataFrame())
+            if not x_unmatched.empty and len(x_unmatched) >= 2:
+                x_new_matches, x_final_unmatched = self.apply_priority3_matching(
+                    x_unmatched, "X", cut_pieces_by_half, tolerance_ranges
+                )
+                
+                if x_new_matches:
+                    # Get existing matches for proper numbering
+                    existing_x = existing_results.get('x_apt_matches_df', pd.DataFrame())
+                    
+                    # Renumber Priority 3 matches to continue sequence
+                    x_renumbered_matches = self.renumber_priority3_matches(existing_x, x_new_matches, "X")
+                    
+                    # Merge with existing matches
+                    combined_x = pd.concat([existing_x, pd.DataFrame(x_renumbered_matches)], ignore_index=True)
+                    existing_results['x_apt_matches_df'] = combined_x
+                    existing_results['x_unmatched_less_df'] = x_final_unmatched
+                    print(f"      X Direction: Added {len(x_new_matches)} Priority 3 matches (pairs: {len(x_new_matches)//2})")
+            
+            # Y Direction Priority 3
+            y_unmatched = existing_results.get('y_unmatched_less_df', pd.DataFrame())
+            if not y_unmatched.empty and len(y_unmatched) >= 2:
+                y_new_matches, y_final_unmatched = self.apply_priority3_matching(
+                    y_unmatched, "Y", cut_pieces_by_half, tolerance_ranges
+                )
+                
+                if y_new_matches:
+                    existing_y = existing_results.get('y_apt_matches_df', pd.DataFrame())
+                    y_renumbered_matches = self.renumber_priority3_matches(existing_y, y_new_matches, "Y")
+                    
+                    combined_y = pd.concat([existing_y, pd.DataFrame(y_renumbered_matches)], ignore_index=True)
+                    existing_results['y_apt_matches_df'] = combined_y
+                    existing_results['y_unmatched_less_df'] = y_final_unmatched
+                    print(f"      Y Direction: Added {len(y_new_matches)} Priority 3 matches (pairs: {len(y_new_matches)//2})")
+        
+        else:
+            # All Direction Priority 3
+            all_unmatched = existing_results.get('all_unmatched_less_df', pd.DataFrame())
+            if not all_unmatched.empty and len(all_unmatched) >= 2:
+                all_new_matches, all_final_unmatched = self.apply_priority3_matching(
+                    all_unmatched, "All", cut_pieces_by_half, tolerance_ranges
+                )
+                
+                if all_new_matches:
+                    existing_all = existing_results.get('all_apt_matches_df', pd.DataFrame())
+                    all_renumbered_matches = self.renumber_priority3_matches(existing_all, all_new_matches, "All")
+                    
+                    combined_all = pd.concat([existing_all, pd.DataFrame(all_renumbered_matches)], ignore_index=True)
+                    existing_results['all_apt_matches_df'] = combined_all
+                    existing_results['all_unmatched_less_df'] = all_final_unmatched
+                    print(f"      All Direction: Added {len(all_new_matches)} Priority 3 matches (pairs: {len(all_new_matches)//2})")
+        
+        return existing_results
+    
+    def debug_priority3_matches(self, matches_df, direction="All"):
+        """Debug function to verify Priority 3 matches are created correctly"""
+        
+        if matches_df.empty:
+            return
+        
+        priority3_matches = matches_df[matches_df.get('_is_priority3', False) == True]
+        
+        if not priority3_matches.empty:
+            print(f"\n🔍 DEBUG: Priority 3 matches in {direction} direction:")
+            
+            # Group by Match ID to show pairs
+            for match_id in priority3_matches['Match ID'].unique():
+                pair_matches = priority3_matches[priority3_matches['Match ID'] == match_id]
+                print(f"   Match {match_id}: {len(pair_matches)} pieces")
+                
+                for _, match in pair_matches.iterrows():
+                    role = match.get('_priority3_piece_role', 'unknown')
+                    print(f"     {role}: {match['Small Piece Apt']}-{match['Small Piece Loc']} ({match['Small Piece Size']}mm)")
+        else:
+            print(f"\n🔍 DEBUG: No Priority 3 matches found in {direction} direction")
+
+    def apply_priority3_matching(self, unmatched_less_df, direction, cut_pieces_by_half, tolerance_ranges):
+        """Apply Priority 3 matching and return matches in same format as Priority 2"""
+        
+        if unmatched_less_df.empty:
+            return [], unmatched_less_df
+        
+        tile_width = cut_pieces_by_half['tile_width']
+        tile_height = cut_pieces_by_half['tile_height']
+        
+        # Step 1: Create pairs from unmatched pieces
+        pairs, remaining_pieces = self.create_priority_3_pairs(unmatched_less_df, direction, tile_width, tile_height)
+        
+        if not pairs:
+            return [], unmatched_less_df
+        
+        print(f"      Priority 3 {direction}: Created {len(pairs)} pairs from {len(unmatched_less_df)} pieces")
+        
+        # Step 2: Convert pairs to matches in SAME FORMAT as Priority 2
+        # Create TWO match entries per pair (one for each piece) with SAME Match ID
+        priority3_matches = []
+        
+        for i, pair in enumerate(pairs):
+            # Determine target dimension for remaining calculation
+            if direction == "X":
+                target_dimension = tile_width
+            elif direction == "Y":
+                target_dimension = tile_height
+            else:
+                target_dimension = min(tile_width, tile_height)
+            
+            # Generate shared Match ID for both pieces in the pair
+            shared_match_id = f'P3-{direction}-{i+1}'
+            
+            # Create match entry for PIECE 1
+            match_entry_1 = {
+                'Match ID': shared_match_id,
+                'Small Piece Apt': pair['piece1_apt'],
+                'Small Piece Loc': pair['piece1']['Location'], 
+                'Small Piece Size': pair['piece1_size'],
+                'Small Piece Remain': target_dimension - pair['piece1_size'],
+                'Large Piece Apt': pair['piece2_apt'],  # Partner apartment
+                'Large Piece Loc': pair['piece2']['Location'],  # Partner location
+                'Large Piece Size': pair['piece2_size'],  # Partner size
+                'Waste': pair['waste'],
+                'Tolerance Range': f"Priority 3 pairing",
+                'Same Apartment': pair['piece1_apt'] == pair['piece2_apt'],
+                '_is_priority3': True,
+                '_priority3_pair_id': i,
+                '_priority3_piece_role': 'piece1'
+            }
+            
+            # Create match entry for PIECE 2 (with roles swapped)
+            match_entry_2 = {
+                'Match ID': shared_match_id,
+                'Small Piece Apt': pair['piece2_apt'],
+                'Small Piece Loc': pair['piece2']['Location'], 
+                'Small Piece Size': pair['piece2_size'],
+                'Small Piece Remain': target_dimension - pair['piece2_size'],
+                'Large Piece Apt': pair['piece1_apt'],  # Partner apartment
+                'Large Piece Loc': pair['piece1']['Location'],  # Partner location
+                'Large Piece Size': pair['piece1_size'],  # Partner size
+                'Waste': pair['waste'],
+                'Tolerance Range': f"Priority 3 pairing",
+                'Same Apartment': pair['piece1_apt'] == pair['piece2_apt'],
+                '_is_priority3': True,
+                '_priority3_pair_id': i,
+                '_priority3_piece_role': 'piece2'
+            }
+            
+            priority3_matches.append(match_entry_1)
+            priority3_matches.append(match_entry_2)
+        
+        return priority3_matches, remaining_pieces
+
+    def create_priority_3_pairs(self, less_pieces_df, direction="X", tile_width=600, tile_height=600):
+        """Create pairs from less-than-half pieces DataFrame"""
+        
+        if less_pieces_df.empty:
+            return [], pd.DataFrame()
+        
+        # Get target dimension
+        if direction == "X":
+            target_dimension = tile_width
+        elif direction == "Y": 
+            target_dimension = tile_height
+        else:  # all_cut
+            target_dimension = min(tile_width, tile_height)
+        
+        max_waste = target_dimension / 3  # 200mm for 600mm tile
+        
+        # Expand pieces with counts
+        expanded_pieces = self.expand_pieces_with_counts(less_pieces_df)
+        
+        if len(expanded_pieces) < 2:
+            return [], less_pieces_df
+        
+        # Generate all valid combinations
+        combinations = []
+        for i in range(len(expanded_pieces)):
+            for j in range(i + 1, len(expanded_pieces)):
+                piece1 = expanded_pieces[i]
+                piece2 = expanded_pieces[j]
+                size1 = piece1['Cut Size (mm)']
+                size2 = piece2['Cut Size (mm)']
+                
+                combined = size1 + size2
+                waste = target_dimension - combined
+                
+                if 0 <= waste <= max_waste:
+                    combinations.append({
+                        'piece1': piece1,
+                        'piece2': piece2,
+                        'piece1_size': size1,
+                        'piece2_size': size2,
+                        'piece1_apt': piece1['Apartment'],
+                        'piece2_apt': piece2['Apartment'],
+                        'combined_size': combined,
+                        'waste': waste,
+                        'piece1_idx': i,
+                        'piece2_idx': j
+                    })
+        
+        # Sort by waste (best matches first)
+        combinations.sort(key=lambda x: x['waste'])
+        
+        # Select non-overlapping pairs
+        used_indices = set()
+        selected_pairs = []
+        
+        for combo in combinations:
+            if combo['piece1_idx'] not in used_indices and combo['piece2_idx'] not in used_indices:
+                selected_pairs.append(combo)
+                used_indices.add(combo['piece1_idx'])
+                used_indices.add(combo['piece2_idx'])
+        
+        # Create remaining pieces summary (back to count format)
+        remaining_expanded = [expanded_pieces[i] for i in range(len(expanded_pieces)) if i not in used_indices]
+        remaining_summary = self.create_unmatched_summary(remaining_expanded)
+        
+        return selected_pairs, remaining_summary
+
+    def expand_pieces_with_counts(self, cut_pieces_input):
+        """Convert count-based input to individual pieces - handles both DataFrame and list"""
+        expanded_pieces = []
+        
+        # Handle DataFrame input
+        if hasattr(cut_pieces_input, 'iterrows'):
+            for _, row in cut_pieces_input.iterrows():
+                count = int(row.get('Count', 1))
+                for i in range(count):
+                    expanded_piece = row.to_dict()
+                    expanded_piece['piece_id'] = f"{row['Apartment']}-{row['Location']}-{row['Cut Size (mm)']}-{i+1}"
+                    expanded_pieces.append(expanded_piece)
+        
+        # Handle list input
+        elif isinstance(cut_pieces_input, list):
+            for piece in cut_pieces_input:
+                if isinstance(piece, dict):
+                    count = int(piece.get('Count', 1))
+                    for i in range(count):
+                        expanded_piece = piece.copy()
+                        expanded_piece['piece_id'] = f"{piece['Apartment']}-{piece['Location']}-{piece['Cut Size (mm)']}-{i+1}"
+                        expanded_pieces.append(expanded_piece)
+                else:
+                    print(f"Warning: Unexpected piece type: {type(piece)}")
+        
+        else:
+            print(f"Warning: Unexpected input type: {type(cut_pieces_input)}")
+            return []
+        
+        return expanded_pieces
+    
+    def renumber_priority3_matches(self, existing_matches_df, priority3_matches, direction):
+        """Renumber Priority 3 matches to continue sequence from existing matches"""
+        
+        if not priority3_matches:
+            return priority3_matches
+        
+        # Find the highest existing match number for this direction
+        if direction == "X":
+            pattern = r'^X(\d+)$'
+        elif direction == "Y":
+            pattern = r'^Y(\d+)$'
+        else:  # All
+            pattern = r'^XY(\d+)$'
+        
+        max_existing_num = 0
+        if not existing_matches_df.empty:
+            for match_id in existing_matches_df['Match ID']:
+                import re
+                match = re.match(pattern, str(match_id))
+                if match:
+                    num = int(match.group(1))
+                    max_existing_num = max(max_existing_num, num)
+        
+        # Renumber Priority 3 matches
+        renumbered_matches = []
+        pair_counter = max_existing_num + 1
+        current_pair_id = None
+        
+        for match in priority3_matches:
+            pair_id = match.get('_priority3_pair_id', 0)
+            
+            # If this is a new pair, increment counter
+            if current_pair_id != pair_id:
+                current_pair_id = pair_id
+                if direction == "X":
+                    new_match_id = f"X{pair_counter}"
+                elif direction == "Y":
+                    new_match_id = f"Y{pair_counter}"
+                else:
+                    new_match_id = f"XY{pair_counter}"
+                pair_counter += 1
+            
+            # Update the match with new ID
+            updated_match = match.copy()
+            updated_match['Match ID'] = new_match_id
+            renumbered_matches.append(updated_match)
+        
+        return renumbered_matches

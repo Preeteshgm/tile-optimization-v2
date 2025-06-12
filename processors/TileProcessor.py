@@ -408,16 +408,9 @@ class TileProcessor:
                             classification = 'cut_y'  # Cut in Y direction in original space
                             cut_side = round(measured_width)
                         else:
-                            # Cut in both directions - classify based on which has greater deviation
-                            width_deviation = abs(1.0 - width_ratio)
-                            height_deviation = abs(1.0 - height_ratio)
-                            
-                            if width_deviation >= height_deviation:
-                                classification = 'cut_y'  # Swapped for 90-degree orientation
-                                cut_side = round(measured_width)
-                            else:
-                                classification = 'cut_x'  # Swapped for 90-degree orientation
-                                cut_side = round(measured_height)
+                            # Cut in both directions - use SMALLER dimension (FIXED)
+                            classification = 'cut_x' if measured_height <= measured_width else 'cut_y'
+                            cut_side = min(round(measured_width), round(measured_height))
                     else:
                         # Normal orientation (0, 180, 270 etc.) - original logic
                         if is_full_width:
@@ -429,16 +422,9 @@ class TileProcessor:
                             classification = 'cut_x'
                             cut_side = round(measured_width)
                         else:
-                            # Cut in both directions - classify based on which has greater deviation
-                            width_deviation = abs(1.0 - width_ratio)
-                            height_deviation = abs(1.0 - height_ratio)
-                            
-                            if width_deviation >= height_deviation:
-                                classification = 'cut_x'
-                                cut_side = round(measured_width)
-                            else:
-                                classification = 'cut_y'
-                                cut_side = round(measured_height)
+                            # Cut in both directions - use SMALLER dimension (FIXED)
+                            classification = 'cut_x' if measured_width <= measured_height else 'cut_y'
+                            cut_side = min(round(measured_width), round(measured_height))
                 else:
                     # No pattern: all cuts in one list
                     classification = 'all_cut'
@@ -450,8 +436,8 @@ class TileProcessor:
                         # Cut in width (X direction)
                         cut_side = round(measured_width)
                     else:
-                        # Cut in both directions - use the larger dimension
-                        cut_side = max(round(measured_width), round(measured_height))
+                        # Cut in both directions - use SMALLER dimension (FIXED)
+                        cut_side = min(round(measured_width), round(measured_height))
                 
                 # Store all tile data
                 all_tiles.append({
@@ -460,7 +446,7 @@ class TileProcessor:
                     'room_name': room_name,
                     'tile_index': tile_idx,
                     'polygon': polygon,
-                    'orientation': orientation,  # CRITICAL: Preserve orientation
+                    'orientation': orientation,
                     'measured_width': measured_width,
                     'measured_height': measured_height,
                     'width': width,
