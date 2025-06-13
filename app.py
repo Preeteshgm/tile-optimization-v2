@@ -78,7 +78,7 @@ LOGIN_CREDENTIALS = {
 
 # Initialize processors as global objects
 dxf_processor = CustomDxfProcessor()
-cluster_processor = RoomClusterProcessor(eps=5000, min_samples=1)
+cluster_processor = RoomClusterProcessor(eps=7500, min_samples=1)
 visualizer = VisualizationProcessor()
 tile_processor = TileProcessor()
 matching_processor = MatchingProcessor()
