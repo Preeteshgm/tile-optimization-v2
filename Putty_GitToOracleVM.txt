@@ -1,0 +1,59 @@
+
+Port :
+139.185.44.125
+
+Putty oracle VM key path 
+F:\00.WORK\OracleKeys\.ssh
+
+ubuntu
+
+===============================
+
+Restart if needed:
+
+sudo pkill -f run_server.py
+
+cd ~/tile-optimization-v2
+
+source venv/bin/activate
+
+sudo nohup ./venv/bin/python run_server.py > app.log 2>&1 &
+
+=============================
+
+
+Keep your local changes and merge (Recommended):
+1. Stash your local changes temporarily:
+
+git stash
+
+2. Pull the updates:
+
+git pull
+
+3. Apply your local changes back:
+
+git stash pop
+
+
+Then restart your app:
+
+source venv/bin/activate
+sudo nohup ./venv/bin/python run_server.py > app.log 2>&1 &
+
+
+========================================
+
+Monitor memory usage:
+
+free -h
+
+Check app status anytime:
+
+ps aux | grep python
+
+-----------------------------
+root      124738  0.0  0.4  11052  4580 pts/1    S    09:10   0:00 sudo nohup ./venv/bin/python run_server.py
+root      124739  3.7 22.0 1043924 215316 pts/1  Sl   09:10   0:13 ./venv/bin/python run_server.py
+ubuntu    124758  0.0  0.0   8168   724 pts/1    S+   09:16   0:00 grep --color=auto python
+-----------------------------------

@@ -73,7 +73,10 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 LOGIN_CREDENTIALS = {
     'admin': 'admin123',
     'user': 'password123',
-    'demo': 'demo2024'
+    'demo': 'demo123',              # Updated password
+    'J386_TileOptz': 'J386',        # New account
+    'J385_TileOptz': 'J385',        # New account  
+    'J388_TileOptz': 'J388'         # New account
 }
 
 # Initialize processors as global objects
