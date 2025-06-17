@@ -66,3 +66,16 @@ Your tile optimization app is now running 24/7 until you manually stop it!
 Close PuTTY and test the website - it should stay online! 🚀
 
 ==========
+
+
+# Check status
+git status
+
+# Add all files
+git add .
+
+# Commit
+git commit -m "Your message"
+
+# Push to GitHub
+git push origin main

@@ -1659,7 +1659,7 @@ def load_matching():
 @app.route('/step9', methods=['GET', 'POST'])
 @login_required
 def step9():
-    """Step 9: Export Full Excel Files and Create Visual Reports per Apartment"""
+    """Step 9: Export Full Excel Files and Create Visual Reports per Apartment - Enhanced with Consolidated Summary Report"""
     if request.method == 'POST':
         data = request.get_json()
         
@@ -1707,7 +1707,7 @@ def step9():
             
             created_files = []
             
-            # Part A: Excel Export
+            # Part A: Excel Export with Consolidated Summary
             if export_choice in ["1", "3"]:
                 # Get apartment and inventory data
                 apartment_tables = {}
@@ -1768,10 +1768,11 @@ def step9():
                     if filename:
                         created_files.append(filename)
                 
-                # Create master summary workbook
+                # *** CONSOLIDATED MASTER WORKBOOK WITH ENHANCED SUMMARY ***
                 master_filename = os.path.join(export_dir, f"MASTER_SUMMARY_{matching_id}.xlsx")
                 
                 with pd.ExcelWriter(master_filename, engine='openpyxl') as writer:
+                    # EXISTING SHEETS - Keep your current summary sheets
                     # Summary sheet
                     summary_data = []
                     for apt, summary in apartment_summaries.items():
@@ -1786,7 +1787,7 @@ def step9():
                         })
                     
                     summary_df = pd.DataFrame(summary_data)
-                    summary_df.to_excel(writer, sheet_name='Summary', index=False)
+                    summary_df.to_excel(writer, sheet_name='1. Matching Summary', index=False)
                     
                     # Matching info sheet
                     info_data = {
@@ -1799,21 +1800,56 @@ def step9():
                         ]
                     }
                     info_df = pd.DataFrame(info_data)
-                    info_df.to_excel(writer, sheet_name='Matching Info', index=False)
+                    info_df.to_excel(writer, sheet_name='2. Matching Info', index=False)
                     
                     # All apartments data
                     if apartment_tables:
                         all_data = pd.concat(list(apartment_tables.values()), ignore_index=True)
-                        all_data.to_excel(writer, sheet_name='All Apartments', index=False)
+                        all_data.to_excel(writer, sheet_name='3. All Apartments Data', index=False)
                     
                     # All inventory data
                     if inventory_tables:
                         all_inv = pd.concat(list(inventory_tables.values()), ignore_index=True)
-                        all_inv.to_excel(writer, sheet_name='All Inventory', index=False)
+                        all_inv.to_excel(writer, sheet_name='4. All Inventory Data', index=False)
+                    
+                    # *** NEW: ENHANCED SUMMARY SHEETS ***
+                    try:
+                        # Get required data for enhanced summary
+                        tile_classification_results = session.get('tile_classification_results', {})
+                        tiles_df = pd.DataFrame(tile_classification_results['tiles_df'])
+                        small_tiles_results = session.get('small_tiles_results', {})
+                        small_tiles_df = pd.DataFrame(small_tiles_results.get('small_tiles_df', []))
+                        final_room_df = pd.DataFrame(session.get('final_room_df', []))
+                        
+                        if not tiles_df.empty and not final_room_df.empty:
+                            # Create enhanced summary data using the NEW method
+                            enhanced_summary_data = export_processor.create_enhanced_summary_data_for_master(
+                                tiles_df, small_tiles_df, final_room_df, selected_matching
+                            )
+                            
+                            if enhanced_summary_data:
+                                # Add enhanced summary sheets
+                                enhanced_summary_data['summary_df'].to_excel(writer, sheet_name='5. Wastage Analysis', index=False)
+                                enhanced_summary_data['detailed_df'].to_excel(writer, sheet_name='6. Detailed Breakdown', index=False)
+                                enhanced_summary_data['project_summary_df'].to_excel(writer, sheet_name='7. Project Summary', index=False)
+                                enhanced_summary_data['tile_specs_df'].to_excel(writer, sheet_name='8. Tile Specifications', index=False)
+                                
+                                print("✅ Enhanced summary sheets added to master workbook")
+                            else:
+                                print("⚠️ Could not create enhanced summary data")
+                        else:
+                            print("⚠️ Missing tile or room data for enhanced summary")
+                            
+                    except Exception as summary_error:
+                        print(f"⚠️ Error adding enhanced summary to master workbook: {summary_error}")
+                        import traceback
+                        traceback.print_exc()
                 
                 created_files.append(master_filename)
+                
+                # DO NOT CREATE SEPARATE ENHANCED SUMMARY - It's now part of master workbook
             
-            # Part B: Visual Reports
+            # Part B: Visual Reports (unchanged from your existing code)
             if export_choice in ["2", "3"]:
                 visual_dir = os.path.join(export_dir, "visual_reports")
                 if not os.path.exists(visual_dir):
@@ -1878,10 +1914,14 @@ def step9():
                     
                     created_files.append(visual_file)
             
-            # Part C: Create ZIP file
+            # Part C: Create ZIP file (unchanged from your existing code)
             if created_files:
                 import zipfile
-                zip_filename = f"Tile_Matching_{selected_matching['name']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+                import re
+                
+                # Clean the matching name to remove invalid characters
+                clean_matching_name = re.sub(r'[<>:"/\\|?*]', '_', selected_matching['name'])
+                zip_filename = f"Tile_Matching_{clean_matching_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
                 
                 with zipfile.ZipFile(zip_filename, 'w', zipfile.ZIP_DEFLATED) as zipf:
                     for file_path in created_files:

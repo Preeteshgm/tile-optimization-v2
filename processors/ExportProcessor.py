@@ -844,3 +844,701 @@ class ExportProcessor:
             cut_pieces_summary['all_inv_more_than_half'] = all_inv_more
         
         return cut_pieces_summary
+
+
+    def create_summary_excel_export(self, tiles_df, small_tiles_df, final_room_df, 
+                               size_threshold=10, output_prefix="final_tiles_export", 
+                               selected_matching=None):
+        """Create a comprehensive summary Excel export with correct cut piece equivalency"""
+        
+        print("\n📊 Creating Enhanced Summary Excel Export...")
+        
+        export_path = os.getcwd()
+        summary_file_path = os.path.join(export_path, f'{output_prefix}_SUMMARY_REPORT.xlsx')
+        
+        # Get tile dimensions from sample tile
+        sample_tiles = [tile for _, tile in tiles_df.iterrows() 
+                    if 'actual_width' in tile and tile['actual_width'] > 0 
+                    and 'actual_height' in tile and tile['actual_height'] > 0]
+        
+        if not sample_tiles:
+            print("⚠️ Could not find valid tile dimensions")
+            return None
+        
+        # Standard tile properties
+        standard_tile = sample_tiles[0]
+        tile_length = standard_tile.get('actual_width', 600)  # mm
+        tile_width = standard_tile.get('actual_height', 600)  # mm
+        tile_area_mm2 = tile_length * tile_width
+        tile_area_m2 = tile_area_mm2 / 1000000  # Convert to square meters
+        half_threshold = min(tile_length, tile_width) / 2
+        
+        print(f"✅ Using tile size: {tile_length}mm × {tile_width}mm = {tile_area_m2:.6f} m²")
+        print(f"✅ Half threshold: {half_threshold}mm")
+        
+        # Get detailed matching data if available
+        matching_data = {}
+        if selected_matching:
+            apartment_summaries = selected_matching.get('apartment_summaries', {})
+            clean_tables = selected_matching.get('clean_tables', {})
+            
+            # Process clean tables to get detailed breakdown
+            for apt_name, summary in apartment_summaries.items():
+                # Initialize counts
+                apt_data = {
+                    'total_matched': summary.get('matched_pieces', 0),
+                    'total_unmatched': summary.get('unmatched_pieces', 0),
+                    'matched_less_than_half': 0,
+                    'matched_more_than_half': 0,
+                    'unmatched_less_than_half': 0,
+                    'unmatched_more_than_half': 0
+                }
+                
+                # Analyze clean tables to get size breakdowns
+                for table_name, table_data in clean_tables.items():
+                    if isinstance(table_data, list) and len(table_data) > 0:
+                        df = pd.DataFrame(table_data)
+                        if 'Apartment' in df.columns and 'Cut Size' in df.columns:
+                            apt_df = df[df['Apartment'] == apt_name]
+                            
+                            for _, row in apt_df.iterrows():
+                                cut_size = row.get('Cut Size', 0)
+                                count = row.get('Count', 0)
+                                group_id = row.get('Group ID', '')
+                                
+                                # Determine if matched or unmatched
+                                is_matched = bool(group_id and group_id.strip())
+                                
+                                # Determine if less than or more than half
+                                is_less_than_half = cut_size < half_threshold
+                                
+                                if is_matched:
+                                    if is_less_than_half:
+                                        apt_data['matched_less_than_half'] += count
+                                    else:
+                                        apt_data['matched_more_than_half'] += count
+                                else:
+                                    if is_less_than_half:
+                                        apt_data['unmatched_less_than_half'] += count
+                                    else:
+                                        apt_data['unmatched_more_than_half'] += count
+                
+                matching_data[apt_name] = apt_data
+        
+        # Create the main summary table
+        summary_data = []
+        
+        # Get all apartment data
+        all_tiles_for_area = pd.concat([tiles_df, small_tiles_df], ignore_index=True) if not small_tiles_df.empty else tiles_df
+        
+        for apt_name in sorted(all_tiles_for_area['apartment_name'].unique()):
+            apt_tiles = all_tiles_for_area[all_tiles_for_area['apartment_name'] == apt_name]
+            
+            # Calculate apartment area (from room polygons)
+            apartment_area_m2 = 0
+            apt_rooms = final_room_df[final_room_df['apartment_name'] == apt_name] if not final_room_df.empty else pd.DataFrame()
+            
+            if not apt_rooms.empty:
+                for _, room in apt_rooms.iterrows():
+                    if hasattr(room, 'polygon') and room['polygon'] is not None:
+                        apartment_area_m2 += room['polygon'].area / 1000000  # Convert mm² to m²
+            else:
+                # Fallback: calculate from tile polygons
+                apartment_area_m2 = sum(
+                    tile['polygon'].area for _, tile in apt_tiles.iterrows() 
+                    if hasattr(tile, 'polygon') and tile['polygon'] is not None
+                ) / 1000000
+            
+            # Count different tile types
+            full_tiles = len(apt_tiles[apt_tiles['classification'] == 'full'])
+            irregular_tiles = len(apt_tiles[apt_tiles['classification'] == 'irregular'])
+            
+            # Get detailed matching data
+            if apt_name in matching_data:
+                apt_match_data = matching_data[apt_name]
+                matched_less_half = apt_match_data['matched_less_than_half']
+                matched_more_half = apt_match_data['matched_more_than_half']
+                unmatched_less_half = apt_match_data['unmatched_less_than_half']
+                unmatched_more_half = apt_match_data['unmatched_more_than_half']
+            else:
+                # If no matching data available, assume all are unmatched and split evenly
+                cut_tiles = apt_tiles[apt_tiles['classification'].isin(['cut_x', 'cut_y', 'all_cut'])]
+                total_cut_tiles = len(cut_tiles)
+                matched_less_half = 0
+                matched_more_half = 0
+                unmatched_less_half = total_cut_tiles // 2  # Rough estimate
+                unmatched_more_half = total_cut_tiles - unmatched_less_half
+            
+            # Calculate full tile equivalents using the CORRECT formula:
+            # FULL + IRREGULAR + (MATCHED)/2 + (UNMATCHED_LESS_THAN_HALF)/2 + (UNMATCHED_MORE_THAN_HALF)
+            matched_equivalent = (matched_less_half + matched_more_half) / 2
+            unmatched_less_equivalent = unmatched_less_half / 2
+            unmatched_more_equivalent = unmatched_more_half  # Full equivalent
+            
+            total_full_equivalents = (full_tiles + irregular_tiles + 
+                                    matched_equivalent + 
+                                    unmatched_less_equivalent + 
+                                    unmatched_more_equivalent)
+            
+            # Calculate tiling area (total tiles × tile size)
+            tiling_area_m2 = total_full_equivalents * tile_area_m2
+            
+            # Calculate wastage percentage
+            wastage_percentage = ((tiling_area_m2 - apartment_area_m2) / apartment_area_m2) * 100 if apartment_area_m2 > 0 else 0
+            
+            # Create the summary row showing the breakdown
+            total_matched = matched_less_half + matched_more_half
+            total_unmatched = unmatched_less_half + unmatched_more_half
+            
+            summary_data.append({
+                'APARTMENT NO.': apt_name,
+                'APARTMENT AREA': f"{apartment_area_m2:.1f}",
+                'FULL TILES': f"({full_tiles} + {irregular_tiles} + ({total_matched})/2 + ({unmatched_less_half})/2 + {unmatched_more_half}) = {total_full_equivalents:.1f}",
+                'TILING AREA': f"{total_full_equivalents:.1f} * {tile_area_m2:.6f} = {tiling_area_m2:.3f}",
+                'WASTAGE %': f"({tiling_area_m2:.3f} - {apartment_area_m2:.1f}) / {apartment_area_m2:.1f} = {wastage_percentage:.2f}%"
+            })
+        
+        # Convert to DataFrame
+        summary_df = pd.DataFrame(summary_data)
+        
+        # Create additional detailed breakdown table
+        detailed_breakdown = []
+        
+        for apt_name in sorted(all_tiles_for_area['apartment_name'].unique()):
+            apt_tiles = all_tiles_for_area[all_tiles_for_area['apartment_name'] == apt_name]
+            
+            # Calculate apartment area
+            apartment_area_m2 = 0
+            apt_rooms = final_room_df[final_room_df['apartment_name'] == apt_name] if not final_room_df.empty else pd.DataFrame()
+            
+            if not apt_rooms.empty:
+                for _, room in apt_rooms.iterrows():
+                    if hasattr(room, 'polygon') and room['polygon'] is not None:
+                        apartment_area_m2 += room['polygon'].area / 1000000
+            else:
+                apartment_area_m2 = sum(
+                    tile['polygon'].area for _, tile in apt_tiles.iterrows() 
+                    if hasattr(tile, 'polygon') and tile['polygon'] is not None
+                ) / 1000000
+            
+            # Detailed counts
+            full_count = len(apt_tiles[apt_tiles['classification'] == 'full'])
+            irregular_count = len(apt_tiles[apt_tiles['classification'] == 'irregular'])
+            cut_x_count = len(apt_tiles[apt_tiles['classification'] == 'cut_x'])
+            cut_y_count = len(apt_tiles[apt_tiles['classification'] == 'cut_y'])
+            all_cut_count = len(apt_tiles[apt_tiles['classification'] == 'all_cut'])
+            small_cuts_count = len(small_tiles_df[small_tiles_df['apartment_name'] == apt_name]) if not small_tiles_df.empty else 0
+            
+            total_cuts = cut_x_count + cut_y_count + all_cut_count
+            total_tiles = full_count + irregular_count + total_cuts
+            
+            # Get detailed matching data
+            if apt_name in matching_data:
+                apt_match_data = matching_data[apt_name]
+                matched_less_half = apt_match_data['matched_less_than_half']
+                matched_more_half = apt_match_data['matched_more_than_half']
+                unmatched_less_half = apt_match_data['unmatched_less_than_half']
+                unmatched_more_half = apt_match_data['unmatched_more_than_half']
+            else:
+                matched_less_half = 0
+                matched_more_half = 0
+                unmatched_less_half = total_cuts // 2
+                unmatched_more_half = total_cuts - unmatched_less_half
+            
+            # Calculate using the correct formula
+            matched_equivalent = (matched_less_half + matched_more_half) / 2
+            unmatched_less_equivalent = unmatched_less_half / 2
+            unmatched_more_equivalent = unmatched_more_half
+            
+            total_full_equivalents = (full_count + irregular_count + 
+                                    matched_equivalent + 
+                                    unmatched_less_equivalent + 
+                                    unmatched_more_equivalent)
+            
+            tiling_area_m2 = total_full_equivalents * tile_area_m2
+            wastage_area_m2 = tiling_area_m2 - apartment_area_m2
+            wastage_percentage = (wastage_area_m2 / apartment_area_m2) * 100 if apartment_area_m2 > 0 else 0
+            
+            detailed_breakdown.append({
+                'APARTMENT NO.': apt_name,
+                'APARTMENT AREA (m²)': round(apartment_area_m2, 2),
+                'FULL TILES': full_count,
+                'IRREGULAR TILES': irregular_count,
+                'CUT X TILES': cut_x_count,
+                'CUT Y TILES': cut_y_count,
+                'ALL CUT TILES': all_cut_count,
+                'TOTAL CUT TILES': total_cuts,
+                'MATCHED < HALF': matched_less_half,
+                'MATCHED > HALF': matched_more_half,
+                'UNMATCHED < HALF': unmatched_less_half,
+                'UNMATCHED > HALF': unmatched_more_half,
+                'MATCHED EQUIVALENT': round(matched_equivalent, 1),
+                'UNMATCHED < HALF EQUIVALENT': round(unmatched_less_equivalent, 1),
+                'UNMATCHED > HALF EQUIVALENT': round(unmatched_more_equivalent, 1),
+                'SMALL CUTS (<{}mm)'.format(size_threshold): small_cuts_count,
+                'TOTAL TILES': total_tiles,
+                'FULL TILE EQUIVALENTS': round(total_full_equivalents, 1),
+                'TILE SIZE (m²)': tile_area_m2,
+                'TILING AREA (m²)': round(tiling_area_m2, 3),
+                'WASTAGE AREA (m²)': round(wastage_area_m2, 3),
+                'WASTAGE %': round(wastage_percentage, 2)
+            })
+        
+        detailed_df = pd.DataFrame(detailed_breakdown)
+        
+        # Create tile specifications table
+        tile_specs_data = [{
+            'PARAMETER': 'TILE LENGTH (mm)',
+            'VALUE': tile_length
+        }, {
+            'PARAMETER': 'TILE WIDTH (mm)', 
+            'VALUE': tile_width
+        }, {
+            'PARAMETER': 'TILE AREA (mm²)',
+            'VALUE': tile_area_mm2
+        }, {
+            'PARAMETER': 'TILE AREA (m²)',
+            'VALUE': f"{tile_area_m2:.6f}"
+        }, {
+            'PARAMETER': 'HALF THRESHOLD (mm)',
+            'VALUE': f"{half_threshold:.1f}"
+        }, {
+            'PARAMETER': 'SMALL CUT THRESHOLD (mm)',
+            'VALUE': size_threshold
+        }]
+        
+        tile_specs_df = pd.DataFrame(tile_specs_data)
+        
+        # Create project summary
+        total_apartments = len(summary_data)
+        total_apartment_area = sum(float(row['APARTMENT AREA']) for row in summary_data)
+        total_tiles_all = sum(row['TOTAL TILES'] for row in detailed_breakdown)
+        total_full_equiv = sum(row['FULL TILE EQUIVALENTS'] for row in detailed_breakdown)
+        total_tiling_area = total_full_equiv * tile_area_m2
+        overall_wastage = ((total_tiling_area - total_apartment_area) / total_apartment_area) * 100 if total_apartment_area > 0 else 0
+        
+        project_summary_data = [{
+            'METRIC': 'TOTAL APARTMENTS',
+            'VALUE': total_apartments
+        }, {
+            'METRIC': 'TOTAL APARTMENT AREA (m²)',
+            'VALUE': round(total_apartment_area, 2)
+        }, {
+            'METRIC': 'TOTAL TILES',
+            'VALUE': total_tiles_all
+        }, {
+            'METRIC': 'TOTAL FULL TILE EQUIVALENTS',
+            'VALUE': round(total_full_equiv, 1)
+        }, {
+            'METRIC': 'TOTAL TILING AREA (m²)',
+            'VALUE': round(total_tiling_area, 3)
+        }, {
+            'METRIC': 'OVERALL WASTAGE %',
+            'VALUE': f"{round(overall_wastage, 2)}%"
+        }]
+        
+        project_summary_df = pd.DataFrame(project_summary_data)
+        
+        # Save to Excel with multiple sheets
+        print(f"💾 Creating summary report: {summary_file_path}")
+        
+        with pd.ExcelWriter(summary_file_path, engine='openpyxl') as writer:
+            # Sheet 1: Main Summary (with corrected formula breakdown)
+            summary_df.to_excel(writer, sheet_name='1. Summary Report', index=False)
+            
+            # Sheet 2: Detailed Breakdown
+            detailed_df.to_excel(writer, sheet_name='2. Detailed Breakdown', index=False)
+            
+            # Sheet 3: Project Summary
+            project_summary_df.to_excel(writer, sheet_name='3. Project Summary', index=False)
+            
+            # Sheet 4: Tile Specifications
+            tile_specs_df.to_excel(writer, sheet_name='4. Tile Specifications', index=False)
+            
+            # Apply formatting to make it look professional
+            for sheet_name in writer.sheets:
+                worksheet = writer.sheets[sheet_name]
+                
+                # Auto-adjust column widths
+                for column in worksheet.columns:
+                    max_length = 0
+                    column_letter = column[0].column_letter
+                    for cell in column:
+                        try:
+                            if len(str(cell.value)) > max_length:
+                                max_length = len(str(cell.value))
+                        except:
+                            pass
+                    adjusted_width = min(max_length + 2, 60)  # Increased for longer formulas
+                    worksheet.column_dimensions[column_letter].width = adjusted_width
+                
+                # Bold headers
+                for cell in worksheet[1]:
+                    cell.font = cell.font.copy(bold=True)
+        
+        print(f"✅ Summary report created: {summary_file_path}")
+        print("\n📋 Report includes:")
+        print("   • Sheet 1: Summary Report (corrected equivalency formula)")
+        print("   • Sheet 2: Detailed Breakdown (with cut piece analysis)")
+        print("   • Sheet 3: Project Summary (totals)")
+        print("   • Sheet 4: Tile Specifications")
+        
+        return {
+            'summary_file_path': summary_file_path,
+            'summary_data': summary_df,
+            'detailed_breakdown': detailed_df,
+            'project_summary': project_summary_df,
+            'tile_specs': tile_specs_df
+        }
+
+    # Also add this method to integrate with your existing export function
+    def export_remaining_tiles_with_enhanced_summary(self, tiles_df, small_tiles_df, final_room_df, 
+                                                size_threshold=10, output_prefix="final_tiles_export"):
+        """Enhanced export that includes both the original report and the new summary"""
+        
+        # First create the original comprehensive report
+        original_result = self.export_remaining_tiles_with_wastage_analysis(
+            tiles_df, small_tiles_df, final_room_df, size_threshold, output_prefix
+        )
+        
+        # Then create the enhanced summary report
+        summary_result = self.create_summary_excel_export(
+            tiles_df, small_tiles_df, final_room_df, size_threshold, output_prefix
+        )
+        
+        print("\n✅ Export complete with enhanced summary!")
+        print(f"   📊 Original comprehensive report: {original_result.get('export_path', 'Not created')}")
+        print(f"   📋 Enhanced summary report: {summary_result.get('summary_file_path', 'Not created')}")
+        
+        return {
+            'original_report': original_result,
+            'summary_report': summary_result,
+            'export_complete': True
+        }
+    
+    def create_enhanced_summary_data_for_master(self, tiles_df, small_tiles_df, final_room_df, selected_matching):
+        """Create enhanced summary data specifically for master workbook integration"""
+        try:
+            # Get tile dimensions from sample tile
+            sample_tiles = [tile for _, tile in tiles_df.iterrows() 
+                           if 'actual_width' in tile and tile['actual_width'] > 0 
+                           and 'actual_height' in tile and tile['actual_height'] > 0]
+            
+            if not sample_tiles:
+                return None
+            
+            # Standard tile properties
+            standard_tile = sample_tiles[0]
+            tile_length = standard_tile.get('actual_width', 600)  # mm
+            tile_width = standard_tile.get('actual_height', 600)  # mm
+            tile_area_mm2 = tile_length * tile_width
+            tile_area_m2 = tile_area_mm2 / 1000000  # Convert to square meters
+            half_threshold = min(tile_length, tile_width) / 2
+            
+            # Get detailed matching data if available
+            matching_data = {}
+            if selected_matching:
+                apartment_summaries = selected_matching.get('apartment_summaries', {})
+                clean_tables = selected_matching.get('clean_tables', {})
+                
+                # Process clean tables to get detailed breakdown
+                for apt_name, summary in apartment_summaries.items():
+                    # Initialize counts
+                    apt_data = {
+                        'total_matched': summary.get('matched_pieces', 0),
+                        'total_unmatched': summary.get('unmatched_pieces', 0),
+                        'matched_less_than_half': 0,
+                        'matched_more_than_half': 0,
+                        'unmatched_less_than_half': 0,
+                        'unmatched_more_than_half': 0
+                    }
+                    
+                    # Analyze clean tables to get size breakdowns
+                    for table_name, table_data in clean_tables.items():
+                        if isinstance(table_data, list) and len(table_data) > 0:
+                            df = pd.DataFrame(table_data)
+                            if 'Apartment' in df.columns and 'Cut Size' in df.columns:
+                                apt_df = df[df['Apartment'] == apt_name]
+                                
+                                for _, row in apt_df.iterrows():
+                                    cut_size = row.get('Cut Size', 0)
+                                    count = row.get('Count', 0)
+                                    group_id = row.get('Group ID', '')
+                                    
+                                    # Determine if matched or unmatched
+                                    is_matched = bool(group_id and group_id.strip())
+                                    
+                                    # Determine if less than or more than half
+                                    is_less_than_half = cut_size < half_threshold
+                                    
+                                    if is_matched:
+                                        if is_less_than_half:
+                                            apt_data['matched_less_than_half'] += count
+                                        else:
+                                            apt_data['matched_more_than_half'] += count
+                                    else:
+                                        if is_less_than_half:
+                                            apt_data['unmatched_less_than_half'] += count
+                                        else:
+                                            apt_data['unmatched_more_than_half'] += count
+                    
+                    matching_data[apt_name] = apt_data
+            
+            # Create the main summary table
+            summary_data = []
+            all_tiles_for_area = pd.concat([tiles_df, small_tiles_df], ignore_index=True) if not small_tiles_df.empty else tiles_df
+            
+            for apt_name in sorted(all_tiles_for_area['apartment_name'].unique()):
+                apt_tiles = all_tiles_for_area[all_tiles_for_area['apartment_name'] == apt_name]
+                
+                # Calculate apartment area (from room polygons)
+                apartment_area_m2 = 0
+                apt_rooms = final_room_df[final_room_df['apartment_name'] == apt_name] if not final_room_df.empty else pd.DataFrame()
+                
+                if not apt_rooms.empty:
+                    for _, room in apt_rooms.iterrows():
+                        if hasattr(room, 'polygon') and room['polygon'] is not None:
+                            apartment_area_m2 += room['polygon'].area / 1000000  # Convert mm² to m²
+                else:
+                    # Fallback: calculate from tile polygons
+                    apartment_area_m2 = sum(
+                        tile['polygon'].area for _, tile in apt_tiles.iterrows() 
+                        if hasattr(tile, 'polygon') and tile['polygon'] is not None
+                    ) / 1000000
+                
+                # Count different tile types
+                full_tiles = len(apt_tiles[apt_tiles['classification'] == 'full'])
+                irregular_tiles = len(apt_tiles[apt_tiles['classification'] == 'irregular'])
+                
+                # Get detailed matching data
+                if apt_name in matching_data:
+                    apt_match_data = matching_data[apt_name]
+                    matched_less_half = apt_match_data['matched_less_than_half']
+                    matched_more_half = apt_match_data['matched_more_than_half']
+                    unmatched_less_half = apt_match_data['unmatched_less_than_half']
+                    unmatched_more_half = apt_match_data['unmatched_more_than_half']
+                else:
+                    # If no matching data available, assume all are unmatched and split evenly
+                    cut_tiles = apt_tiles[apt_tiles['classification'].isin(['cut_x', 'cut_y', 'all_cut'])]
+                    total_cut_tiles = len(cut_tiles)
+                    matched_less_half = 0
+                    matched_more_half = 0
+                    unmatched_less_half = total_cut_tiles // 2  # Rough estimate
+                    unmatched_more_half = total_cut_tiles - unmatched_less_half
+                
+                # *** DESIGN WASTAGE CALCULATION (Before Optimization) ***
+                # Design treats ALL cuts as unmatched (no optimization)
+                all_less_half = matched_less_half + unmatched_less_half
+                all_more_half = matched_more_half + unmatched_more_half
+                
+                design_total_equivalents = (full_tiles + irregular_tiles + 
+                                          (all_less_half / 2) + all_more_half)
+                design_tiling_area_m2 = design_total_equivalents * tile_area_m2
+                design_wastage_percentage = ((design_tiling_area_m2 - apartment_area_m2) / apartment_area_m2) * 100 if apartment_area_m2 > 0 else 0
+                
+                # *** OPTIMISED WASTAGE CALCULATION (After Optimization) ***
+                # Calculate full tile equivalents using the CORRECT formula:
+                # FULL + IRREGULAR + (MATCHED)/2 + (UNMATCHED_LESS_THAN_HALF)/2 + (UNMATCHED_MORE_THAN_HALF)
+                matched_equivalent = (matched_less_half + matched_more_half) / 2
+                unmatched_less_equivalent = unmatched_less_half / 2
+                unmatched_more_equivalent = unmatched_more_half  # Full equivalent
+                
+                optimised_total_equivalents = (full_tiles + irregular_tiles + 
+                                             matched_equivalent + 
+                                             unmatched_less_equivalent + 
+                                             unmatched_more_equivalent)
+                
+                # Calculate tiling area (total tiles × tile size)
+                optimised_tiling_area_m2 = optimised_total_equivalents * tile_area_m2
+                
+                # Calculate wastage percentage
+                optimised_wastage_percentage = ((optimised_tiling_area_m2 - apartment_area_m2) / apartment_area_m2) * 100 if apartment_area_m2 > 0 else 0
+                
+                # Calculate savings
+                wastage_savings = design_wastage_percentage - optimised_wastage_percentage
+                
+                # Create the summary row showing the breakdown
+                total_matched = matched_less_half + matched_more_half
+                total_unmatched = unmatched_less_half + unmatched_more_half
+                
+                summary_data.append({
+                    'APARTMENT NO.': apt_name,
+                    'APARTMENT AREA (m²)': round(apartment_area_m2, 2),
+                    'FULL TILES': full_tiles,
+                    'IRREGULAR TILES': irregular_tiles,
+                    'MATCHED CUTS': total_matched,
+                    'UNMATCHED CUTS': total_unmatched,
+                    'DESIGN EQUIVALENTS': round(design_total_equivalents, 1),
+                    'OPTIMISED EQUIVALENTS': round(optimised_total_equivalents, 1),
+                    'DESIGN TILING AREA (m²)': round(design_tiling_area_m2, 3),
+                    'OPTIMISED TILING AREA (m²)': round(optimised_tiling_area_m2, 3),
+                    'DESIGN WASTAGE %': round(design_wastage_percentage, 2),
+                    'OPTIMISED WASTAGE %': round(optimised_wastage_percentage, 2),
+                    'SAVINGS %': round(wastage_savings, 2)
+                })
+            
+            # Convert to DataFrame
+            summary_df = pd.DataFrame(summary_data)
+            
+            # Create additional detailed breakdown table
+            detailed_breakdown = []
+            for apt_name in sorted(all_tiles_for_area['apartment_name'].unique()):
+                apt_tiles = all_tiles_for_area[all_tiles_for_area['apartment_name'] == apt_name]
+                
+                # Calculate apartment area
+                apartment_area_m2 = 0
+                apt_rooms = final_room_df[final_room_df['apartment_name'] == apt_name] if not final_room_df.empty else pd.DataFrame()
+                
+                if not apt_rooms.empty:
+                    for _, room in apt_rooms.iterrows():
+                        if hasattr(room, 'polygon') and room['polygon'] is not None:
+                            apartment_area_m2 += room['polygon'].area / 1000000
+                else:
+                    apartment_area_m2 = sum(
+                        tile['polygon'].area for _, tile in apt_tiles.iterrows() 
+                        if hasattr(tile, 'polygon') and tile['polygon'] is not None
+                    ) / 1000000
+                
+                # Detailed counts
+                full_count = len(apt_tiles[apt_tiles['classification'] == 'full'])
+                irregular_count = len(apt_tiles[apt_tiles['classification'] == 'irregular'])
+                cut_x_count = len(apt_tiles[apt_tiles['classification'] == 'cut_x'])
+                cut_y_count = len(apt_tiles[apt_tiles['classification'] == 'cut_y'])
+                all_cut_count = len(apt_tiles[apt_tiles['classification'] == 'all_cut'])
+                small_cuts_count = len(small_tiles_df[small_tiles_df['apartment_name'] == apt_name]) if not small_tiles_df.empty else 0
+                
+                total_cuts = cut_x_count + cut_y_count + all_cut_count
+                total_tiles = full_count + irregular_count + total_cuts
+                
+                # Get detailed matching data
+                if apt_name in matching_data:
+                    apt_match_data = matching_data[apt_name]
+                    matched_less_half = apt_match_data['matched_less_than_half']
+                    matched_more_half = apt_match_data['matched_more_than_half']
+                    unmatched_less_half = apt_match_data['unmatched_less_than_half']
+                    unmatched_more_half = apt_match_data['unmatched_more_than_half']
+                else:
+                    matched_less_half = 0
+                    matched_more_half = 0
+                    unmatched_less_half = total_cuts // 2
+                    unmatched_more_half = total_cuts - unmatched_less_half
+                
+                # Calculate using both formulas
+                # Design (before optimization)
+                all_less_half = matched_less_half + unmatched_less_half
+                all_more_half = matched_more_half + unmatched_more_half
+                design_total_equivalents = (full_count + irregular_count + 
+                                          (all_less_half / 2) + all_more_half)
+                design_tiling_area_m2 = design_total_equivalents * tile_area_m2
+                design_wastage_percentage = ((design_tiling_area_m2 - apartment_area_m2) / apartment_area_m2) * 100 if apartment_area_m2 > 0 else 0
+                
+                # Optimised (after optimization)
+                matched_equivalent = (matched_less_half + matched_more_half) / 2
+                unmatched_less_equivalent = unmatched_less_half / 2
+                unmatched_more_equivalent = unmatched_more_half
+                
+                optimised_total_equivalents = (full_count + irregular_count + 
+                                             matched_equivalent + 
+                                             unmatched_less_equivalent + 
+                                             unmatched_more_equivalent)
+                
+                optimised_tiling_area_m2 = optimised_total_equivalents * tile_area_m2
+                optimised_wastage_percentage = ((optimised_tiling_area_m2 - apartment_area_m2) / apartment_area_m2) * 100 if apartment_area_m2 > 0 else 0
+                
+                detailed_breakdown.append({
+                    'APARTMENT NO.': apt_name,
+                    'APARTMENT AREA (m²)': round(apartment_area_m2, 2),
+                    'FULL TILES': full_count,
+                    'IRREGULAR TILES': irregular_count,
+                    'CUT X TILES': cut_x_count,
+                    'CUT Y TILES': cut_y_count,
+                    'ALL CUT TILES': all_cut_count,
+                    'TOTAL CUT TILES': total_cuts,
+                    'MATCHED < HALF': matched_less_half,
+                    'MATCHED > HALF': matched_more_half,
+                    'UNMATCHED < HALF': unmatched_less_half,
+                    'UNMATCHED > HALF': unmatched_more_half,
+                    'DESIGN EQUIVALENTS': round(design_total_equivalents, 1),
+                    'OPTIMISED EQUIVALENTS': round(optimised_total_equivalents, 1),
+                    'SMALL CUTS (<10mm)': small_cuts_count,
+                    'TOTAL TILES': total_tiles,
+                    'DESIGN TILING AREA (m²)': round(design_tiling_area_m2, 3),
+                    'OPTIMISED TILING AREA (m²)': round(optimised_tiling_area_m2, 3),
+                    'DESIGN WASTAGE %': round(design_wastage_percentage, 2),
+                    'OPTIMISED WASTAGE %': round(optimised_wastage_percentage, 2),
+                    'SAVINGS %': round(design_wastage_percentage - optimised_wastage_percentage, 2)
+                })
+            
+            detailed_df = pd.DataFrame(detailed_breakdown)
+            
+            # Create tile specifications table
+            tile_specs_data = [{
+                'PARAMETER': 'TILE LENGTH (mm)',
+                'VALUE': tile_length
+            }, {
+                'PARAMETER': 'TILE WIDTH (mm)', 
+                'VALUE': tile_width
+            }, {
+                'PARAMETER': 'TILE AREA (mm²)',
+                'VALUE': tile_area_mm2
+            }, {
+                'PARAMETER': 'TILE AREA (m²)',
+                'VALUE': f"{tile_area_m2:.6f}"
+            }, {
+                'PARAMETER': 'HALF THRESHOLD (mm)',
+                'VALUE': f"{half_threshold:.1f}"
+            }]
+            
+            tile_specs_df = pd.DataFrame(tile_specs_data)
+            
+            # Create project summary with both design and optimised totals
+            total_apartments = len(summary_data)
+            total_apartment_area = sum(row['APARTMENT AREA (m²)'] for row in summary_data)
+            total_tiles_all = sum(row['TOTAL TILES'] for row in detailed_breakdown)
+            
+            # Calculate project totals
+            total_design_tiling_area = sum(row['DESIGN TILING AREA (m²)'] for row in summary_data)
+            total_optimised_tiling_area = sum(row['OPTIMISED TILING AREA (m²)'] for row in summary_data)
+            
+            overall_design_wastage = ((total_design_tiling_area - total_apartment_area) / total_apartment_area) * 100 if total_apartment_area > 0 else 0
+            overall_optimised_wastage = ((total_optimised_tiling_area - total_apartment_area) / total_apartment_area) * 100 if total_apartment_area > 0 else 0
+            overall_savings = overall_design_wastage - overall_optimised_wastage
+            
+            project_summary_data = [{
+                'METRIC': 'TOTAL APARTMENTS',
+                'VALUE': total_apartments
+            }, {
+                'METRIC': 'TOTAL APARTMENT AREA (m²)',
+                'VALUE': round(total_apartment_area, 2)
+            }, {
+                'METRIC': 'TOTAL TILES',
+                'VALUE': total_tiles_all
+            }, {
+                'METRIC': 'DESIGN TILING AREA (m²)',
+                'VALUE': round(total_design_tiling_area, 3)
+            }, {
+                'METRIC': 'OPTIMISED TILING AREA (m²)',
+                'VALUE': round(total_optimised_tiling_area, 3)
+            }, {
+                'METRIC': 'DESIGN WASTAGE %',
+                'VALUE': f"{round(overall_design_wastage, 2)}%"
+            }, {
+                'METRIC': 'OPTIMISED WASTAGE %',
+                'VALUE': f"{round(overall_optimised_wastage, 2)}%"
+            }, {
+                'METRIC': 'TOTAL SAVINGS %',
+                'VALUE': f"{round(overall_savings, 2)}%"
+            }]
+            
+            project_summary_df = pd.DataFrame(project_summary_data)
+            
+            return {
+                'summary_df': summary_df,
+                'detailed_df': detailed_df,
+                'tile_specs_df': tile_specs_df,
+                'project_summary_df': project_summary_df
+            }
+            
+        except Exception as e:
+            print(f"Error creating enhanced summary data: {e}")
+            return None

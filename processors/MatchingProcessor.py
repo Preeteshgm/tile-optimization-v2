@@ -823,7 +823,6 @@ class MatchingProcessor:
                                         color = group_entry.get('color', self.UNMATCHED_COLOR)
                                         match_type = group_entry.get('match_type', 'Unknown')
                                         group_id = group_entry.get('group_id', '')
-                                        print(f"DEBUG: EXACT MATCH - Color: {color}, Type: {match_type}, ID: {group_id}")
                                         return color, f"Matched ({match_type})", group_id
                         else:
                             # Fuzzy match with tolerance
@@ -844,10 +843,7 @@ class MatchingProcessor:
                                             color = group_entry.get('color', self.UNMATCHED_COLOR)
                                             match_type = group_entry.get('match_type', 'Unknown')
                                             group_id = group_entry.get('group_id', '')
-                                            print(f"DEBUG: FUZZY MATCH - Color: {color}, Type: {match_type}, ID: {group_id}")
                                             return color, f"Matched ({match_type})", group_id
-            
-            print(f"DEBUG: NO MATCH found for: {apartment_name} - {room_name} - {classification}")
         
         # Default to unmatched
         return self.UNMATCHED_COLOR, 'Unmatched Cut', ''
