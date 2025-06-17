@@ -968,13 +968,15 @@ class VisualizationProcessor:
         return match_type_counts
     
     def plot_clusters_with_positions(self, clusters_df, use_final_names=False):
-        """Generate plot and return room positions for interactive overlay"""
+        """FINAL VERSION - Correct positioning using start points and proper scale"""
         import matplotlib.pyplot as plt
         import io
         import base64
         
-        # Create the plot exactly like the original plot_clusters method
-        plt.figure(figsize=(14, 14))
+        print("\n=== STARTING PLOT GENERATION ===")
+        
+        # Create plot with EXACT dimensions
+        fig, ax = plt.subplots(figsize=(18, 12))  # Fixed size for consistent scaling
         unique_clusters = clusters_df['apartment_cluster'].unique()
 
         if use_final_names and 'apartment_name' in clusters_df.columns:
@@ -983,63 +985,266 @@ class VisualizationProcessor:
         else:
             apartment_names = {cluster_id: f"Apartment {cluster_id+1}" for cluster_id in unique_clusters}
 
-        # Track plot bounds for coordinate conversion
+        # Step 1: Get start points from session
+        start_points_data = []
+        try:
+            from flask import session
+            start_points_data = session.get('start_points_data', [])
+            print(f"Loaded {len(start_points_data)} start points from session")
+        except Exception as e:
+            print(f"Error loading start points: {e}")
+        
+        # Step 2: Create start point mapping
+        start_point_map = {}
+        for sp in start_points_data:
+            room_id = sp.get('room_id', -1)
+            if room_id >= 0 and 'centroid' in sp:
+                start_point_map[room_id] = {
+                    'x': float(sp['centroid'][0]),
+                    'y': float(sp['centroid'][1])
+                }
+        print(f"Mapped {len(start_point_map)} start points to rooms")
+
+        # Step 3: Plot rooms and collect coordinates
         all_x_coords = []
         all_y_coords = []
-        room_positions = []
-
+        room_data = []
+        apartment_data = {}
+        
         for cluster_id in unique_clusters:
             cluster_rooms = clusters_df[clusters_df['apartment_cluster'] == cluster_id]
             color = self.get_color(cluster_id)
             apt_name = self.apartment_names.get(cluster_id, apartment_names.get(cluster_id, f"Apartment {cluster_id+1}"))
             
+            # Initialize apartment data
+            apartment_data[cluster_id] = {
+                'name': apt_name,
+                'room_positions': [],
+                'bounds': {'min_x': float('inf'), 'max_x': float('-inf'), 
+                          'min_y': float('inf'), 'max_y': float('-inf')}
+            }
+            
             for idx, row in cluster_rooms.iterrows():
                 polygon = row['polygon']
-                x, y = polygon.exterior.xy
-                plt.fill(x, y, alpha=0.6, label=apt_name if idx == cluster_rooms.index[0] else "", color=color)
+                x_coords, y_coords = polygon.exterior.xy
                 
-                # DON'T plot the text on matplotlib anymore - we'll overlay it
-                # plt.text(row['centroid_x'], row['centroid_y'], row['room_name'], fontsize=8, ha='center', color='black')
+                # Plot the room (with label for first room of each apartment)
+                ax.fill(x_coords, y_coords, alpha=0.6, 
+                       label=apt_name if idx == cluster_rooms.index[0] else "", 
+                       color=color)
                 
-                # Collect coordinates for bounds calculation
-                all_x_coords.extend(x)
-                all_y_coords.extend(y)
+                # Collect all coordinates for overall bounds
+                all_x_coords.extend(x_coords)
+                all_y_coords.extend(y_coords)
                 
-                # Store room position data for overlay (convert numpy types to native Python)
-                room_positions.append({
-                    'room_id': int(row['room_id']),
+                # Update apartment bounds
+                bounds = apartment_data[cluster_id]['bounds']
+                bounds['min_x'] = min(bounds['min_x'], min(x_coords))
+                bounds['max_x'] = max(bounds['max_x'], max(x_coords))
+                bounds['min_y'] = min(bounds['min_y'], min(y_coords))
+                bounds['max_y'] = max(bounds['max_y'], max(y_coords))
+                
+                # Determine room center position
+                room_id = int(row['room_id'])
+                
+                if room_id in start_point_map:
+                    # Use start point (PREFERRED - most accurate for tiles)
+                    room_x = start_point_map[room_id]['x']
+                    room_y = start_point_map[room_id]['y']
+                    position_source = "START_POINT"
+                else:
+                    # Fallback to room centroid
+                    room_x = float(row['centroid_x'])
+                    room_y = float(row['centroid_y'])
+                    position_source = "CENTROID"
+                
+                print(f"Room {room_id} ({row['room_name']}): {position_source} at ({room_x:.0f}, {room_y:.0f})")
+                
+                # Store room data
+                room_info = {
+                    'room_id': room_id,
                     'room_name': str(row['room_name']),
                     'apartment_name': str(row.get('apartment_name', apt_name)),
-                    'centroid_x': float(row['centroid_x']),
-                    'centroid_y': float(row['centroid_y']),
-                    'apartment_cluster': int(cluster_id)
-                })
+                    'x': room_x,
+                    'y': room_y,
+                    'apartment_cluster': int(cluster_id),
+                    'type': 'room'
+                }
+                
+                room_data.append(room_info)
+                apartment_data[cluster_id]['room_positions'].append((room_x, room_y))
 
-        plt.title("🏢 Apartment Clusters with Room Names")
-        plt.legend()
-        plt.grid(True)
+        # Step 4: Configure plot without legend (to prevent squeezing)
+        ax.set_title("🏢 Apartment Clusters with Room Names", fontsize=16, pad=20)
+        ax.grid(True, alpha=0.3)
         
-        # Get the current axis limits to calculate percentage positions
-        ax = plt.gca()
-        x_min, x_max = ax.get_xlim()
-        y_min, y_max = ax.get_ylim()
+        # Step 5: Set EXACT plot bounds
+        data_min_x, data_max_x = min(all_x_coords), max(all_x_coords)
+        data_min_y, data_max_y = min(all_y_coords), max(all_y_coords)
         
-        # Calculate plot dimensions
-        plot_width = x_max - x_min
-        plot_height = y_max - y_min
+        data_width = data_max_x - data_min_x
+        data_height = data_max_y - data_min_y
         
-        # Convert room positions to percentage coordinates for overlay
-        for room in room_positions:
-            # Convert to percentage coordinates (0-100)
-            # Note: Y coordinates are flipped for web display (top = 0)
-            room['x_percent'] = float(((room['centroid_x'] - x_min) / plot_width) * 100)
-            room['y_percent'] = float(((y_max - room['centroid_y']) / plot_height) * 100)  # Flip Y axis
+        # Add consistent padding
+        padding_percent = 0.05  # 5% padding on all sides
+        padding_x = data_width * padding_percent
+        padding_y = data_height * padding_percent
         
-        # Convert plot to base64 string
+        # Final plot bounds
+        plot_min_x = data_min_x - padding_x
+        plot_max_x = data_max_x + padding_x
+        plot_min_y = data_min_y - padding_y
+        plot_max_y = data_max_y + padding_y
+        
+        ax.set_xlim(plot_min_x, plot_max_x)
+        ax.set_ylim(plot_min_y, plot_max_y)
+        ax.set_aspect('equal')  # Maintain aspect ratio
+        
+        # Calculate final plot dimensions
+        plot_width = plot_max_x - plot_min_x
+        plot_height = plot_max_y - plot_min_y
+        
+        print(f"\nPlot bounds: X({plot_min_x:.0f} to {plot_max_x:.0f}), Y({plot_min_y:.0f} to {plot_max_y:.0f})")
+        print(f"Plot size: {plot_width:.0f} x {plot_height:.0f}")
+        
+        # Step 6: Calculate apartment label positions - FIXED to use true centroids + slight upward offset
+        apartment_data_final = []
+        
+        for cluster_id, apt_info in apartment_data.items():
+            if not apt_info['room_positions']:
+                continue
+            
+            room_positions = apt_info['room_positions']
+            bounds = apt_info['bounds']
+            
+            # Calculate TRUE apartment geometric center (average of room positions)
+            center_x = sum(x for x, y in room_positions) / len(room_positions)
+            center_y = sum(y for x, y in room_positions) / len(room_positions)
+            
+            # Calculate apartment dimensions for offset calculation
+            apt_width = bounds['max_x'] - bounds['min_x']
+            apt_height = bounds['max_y'] - bounds['min_y']
+            
+            # Move apartment label SLIGHTLY ABOVE center (adjust this value as needed)
+            upward_offset_percent = 0.50  # 12% of apartment height above center
+            apt_label_x = center_x
+            apt_label_y = center_y + (apt_height * upward_offset_percent)
+            
+            # Check if this position conflicts with any room in this apartment
+            min_distance_to_rooms = min(
+                ((apt_label_x - rx)**2 + (apt_label_y - ry)**2)**0.5
+                for rx, ry in room_positions
+            )
+            
+            # Only try alternatives if there's a significant conflict
+            min_safe_distance = min(apt_width, apt_height) * 0.08
+            
+            if min_distance_to_rooms < min_safe_distance:
+                print(f"Apartment {apt_info['name']}: above-center conflicts, trying alternatives...")
+                
+                # Try alternative positions around the center
+                alternatives = [
+                    # Original above position (keep trying this first)
+                    (center_x, center_y + apt_height * upward_offset_percent),
+                    # Further above
+                    (center_x, center_y + apt_height * 0.20),
+                    # Slightly less above
+                    (center_x, center_y + apt_height * 0.08),
+                    # Above-left
+                    (center_x - apt_width * 0.15, center_y + apt_height * 0.10),
+                    # Above-right
+                    (center_x + apt_width * 0.15, center_y + apt_height * 0.10),
+                    # Pure center as last resort
+                    (center_x, center_y)
+                ]
+                
+                best_position = alternatives[0]  # Default to above-center
+                best_distance = min_distance_to_rooms
+                
+                for alt_x, alt_y in alternatives:
+                    min_dist = min(
+                        ((alt_x - rx)**2 + (alt_y - ry)**2)**0.5
+                        for rx, ry in room_positions
+                    )
+                    
+                    if min_dist > best_distance:
+                        best_distance = min_dist
+                        best_position = (alt_x, alt_y)
+                
+                apt_label_x, apt_label_y = best_position
+                print(f"  -> Moved to ({apt_label_x:.0f}, {apt_label_y:.0f}) with distance {best_distance:.0f}")
+            else:
+                print(f"Apartment {apt_info['name']}: using above-center ({apt_label_x:.0f}, {apt_label_y:.0f}) - no conflicts")
+            
+            apartment_data_final.append({
+                'apartment_cluster': int(cluster_id),
+                'apartment_name': apt_info['name'],
+                'x': apt_label_x,
+                'y': apt_label_y,
+                'type': 'apartment'
+            })
+
+        # Step 7: Convert to percentage coordinates for web overlay
+        print(f"\n=== COORDINATE CONVERSION ===")
+        
+        final_positions = []
+        
+        # Convert room positions
+        for room in room_data:
+            # Normalize to 0-1
+            norm_x = (room['x'] - plot_min_x) / plot_width
+            norm_y = (room['y'] - plot_min_y) / plot_height
+            
+            # Convert to percentage with Y-flip for web
+            web_x = norm_x * 100
+            web_y = (1.0 - norm_y) * 100
+            
+            final_positions.append({
+                'room_id': room['room_id'],
+                'room_name': room['room_name'],
+                'apartment_name': room['apartment_name'],
+                'centroid_x': room['x'],
+                'centroid_y': room['y'],
+                'apartment_cluster': room['apartment_cluster'],
+                'x_percent': web_x,
+                'y_percent': web_y,
+                'type': 'room'
+            })
+            
+            print(f"Room {room['room_name']}: ({room['x']:.0f}, {room['y']:.0f}) -> ({web_x:.1f}%, {web_y:.1f}%)")
+        
+        # Convert apartment positions
+        for apt in apartment_data_final:
+            # Normalize to 0-1
+            norm_x = (apt['x'] - plot_min_x) / plot_width
+            norm_y = (apt['y'] - plot_min_y) / plot_height
+            
+            # Convert to percentage with Y-flip for web
+            web_x = norm_x * 100
+            web_y = (1.0 - norm_y) * 100
+            
+            final_positions.append({
+                'apartment_cluster': apt['apartment_cluster'],
+                'apartment_name': apt['apartment_name'],
+                'centroid_x': apt['x'],
+                'centroid_y': apt['y'],
+                'x_percent': web_x,
+                'y_percent': web_y,
+                'type': 'apartment'
+            })
+            
+            print(f"Apt {apt['apartment_name']}: ({apt['x']:.0f}, {apt['y']:.0f}) -> ({web_x:.1f}%, {web_y:.1f}%)")
+
+        # Step 8: Generate final plot
+        plt.tight_layout()
         buf = io.BytesIO()
-        plt.savefig(buf, format='png', bbox_inches='tight', dpi=150)
+        plt.savefig(buf, format='png', bbox_inches='tight', dpi=300, 
+                   facecolor='white', pad_inches=0.05)
         plt.close()
         buf.seek(0)
         plot_b64 = base64.b64encode(buf.read()).decode('utf-8')
         
-        return plot_b64, room_positions
+        print(f"\n=== GENERATION COMPLETE ===")
+        print(f"Created plot with {len([p for p in final_positions if p['type'] == 'room'])} rooms and {len([p for p in final_positions if p['type'] == 'apartment'])} apartments")
+        
+        return plot_b64, final_positions

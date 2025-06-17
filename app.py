@@ -392,7 +392,14 @@ def step2():
             room_polygons = deserialize_rooms(session.get('room_polygons', []))
             if len(room_polygons) == len(room_df):
                 room_df['polygon'] = room_polygons
-                updated_plot_b64, room_positions = visualizer.plot_clusters_with_positions(room_df, use_final_names=True)
+                # Check if new method exists, fallback to original if not
+                if hasattr(visualizer, 'plot_clusters_with_positions'):
+                    updated_plot_b64, room_positions = visualizer.plot_clusters_with_positions(room_df, use_final_names=True)
+                    # Convert numpy types to native Python types for JSON serialization
+                    room_positions = convert_numpy_types(room_positions)
+                else:
+                    updated_plot_b64 = visualizer.plot_clusters(room_df, use_final_names=True)
+                    room_positions = []
             else:
                 updated_plot_b64 = generate_placeholder_image("Updated Room Names", 800, 600)
                 room_positions = []
@@ -419,16 +426,37 @@ def step2():
         room_df_records = session.get('room_df', [])
         
         if not room_df_records:
+            print("No room_df found in session, redirecting to step1")
             return redirect(url_for('step1'))
         
         room_df = pd.DataFrame(room_df_records)
+        print(f"Found {len(room_df)} rooms in session")
         
         # Generate plot with positions for interactive overlay
         room_polygons = deserialize_rooms(session.get('room_polygons', []))
+        room_positions = []
+        
         if len(room_polygons) == len(room_df):
             room_df['polygon'] = room_polygons
-            cluster_plot, room_positions = visualizer.plot_clusters_with_positions(room_df, use_final_names=True)
+            
+            # Check if new method exists, fallback to original if not
+            if hasattr(visualizer, 'plot_clusters_with_positions'):
+                try:
+                    cluster_plot, room_positions = visualizer.plot_clusters_with_positions(room_df, use_final_names=True)
+                    # Convert numpy types to native Python types for JSON serialization
+                    room_positions = convert_numpy_types(room_positions)
+                    print(f"Generated interactive plot with {len(room_positions)} room positions")
+                except Exception as e:
+                    print(f"Error with plot_clusters_with_positions: {e}")
+                    # Fallback to original method
+                    cluster_plot = visualizer.plot_clusters(room_df, use_final_names=True)
+                    room_positions = []
+            else:
+                print("plot_clusters_with_positions method not found, using original method")
+                cluster_plot = visualizer.plot_clusters(room_df, use_final_names=True)
+                room_positions = []
         else:
+            print(f"Polygon count mismatch: {len(room_polygons)} polygons vs {len(room_df)} rooms")
             cluster_plot = generate_placeholder_image("Room Layout", 800, 600)
             room_positions = []
         
@@ -437,8 +465,8 @@ def step2():
         for apt_name, group in room_df.groupby('apartment_name'):
             rooms = [
                 {
-                    'room_id': row['room_id'],
-                    'room_name': row.get('room_name', f"{apt_name}-R{row['room_id']+1}")
+                    'room_id': int(row['room_id']),  # Convert to native int
+                    'room_name': row.get('room_name', f"{apt_name}-R{int(row['room_id'])+1}")
                 }
                 for _, row in group.iterrows()
             ]
@@ -448,6 +476,9 @@ def step2():
                 'rooms': rooms
             })
         
+        print(f"Prepared {len(apartments)} apartments for template")
+        print(f"Room positions count: {len(room_positions)}")
+        
         return render_template('step2.html', 
                              apartments=apartments, 
                              cluster_plot=cluster_plot,
@@ -455,7 +486,70 @@ def step2():
 
     except Exception as e:
         print(f"Error in step2 GET: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return redirect(url_for('step1'))
+
+@app.route('/update_apartment_name', methods=['POST'])
+@login_required
+def update_apartment_name():
+    """Update apartment name via AJAX"""
+    try:
+        data = request.get_json()
+        apartment_cluster = int(data.get('apartment_cluster'))
+        new_name = data.get('new_name', '').strip()
+        
+        if not new_name:
+            return jsonify({'error': 'Apartment name cannot be empty'})
+        
+        # Update room_df in session
+        room_df = pd.DataFrame(session.get('room_df', []))
+        
+        if room_df.empty:
+            return jsonify({'error': 'No room data available'})
+        
+        # Find and update all rooms in this apartment cluster
+        mask = room_df['apartment_cluster'] == apartment_cluster
+        if not mask.any():
+            return jsonify({'error': 'Apartment not found'})
+        
+        old_name = room_df.loc[mask, 'apartment_name'].iloc[0]
+        room_df.loc[mask, 'apartment_name'] = new_name
+        
+        # Update session
+        session['room_df'] = room_df.to_dict('records')
+        
+        # Also update apartment_orientations if it exists
+        apartment_orientations = session.get('apartment_orientations', [])
+        for apt in apartment_orientations:
+            if apt.get('apartment_name') == old_name:
+                apt['apartment_name'] = new_name
+        session['apartment_orientations'] = apartment_orientations
+        
+        return jsonify({
+            'success': True,
+            'message': f'Apartment name updated from "{old_name}" to "{new_name}"',
+            'old_name': old_name,
+            'new_name': new_name
+        })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Error updating apartment name: {str(e)}'})
+
+def convert_numpy_types(obj):
+    """Convert numpy types to native Python types for JSON serialization"""
+    if isinstance(obj, list):
+        return [convert_numpy_types(item) for item in obj]
+    elif isinstance(obj, dict):
+        return {key: convert_numpy_types(value) for key, value in obj.items()}
+    elif hasattr(obj, 'item'):  # numpy scalar
+        return obj.item()
+    elif hasattr(obj, 'tolist'):  # numpy array
+        return obj.tolist()
+    else:
+        return obj
 
 @app.route('/step3', methods=['GET', 'POST'])
 @login_required
