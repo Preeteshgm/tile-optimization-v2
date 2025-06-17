@@ -388,17 +388,19 @@ def step2():
             session['room_df'] = room_df.to_dict('records')
             session['apartment_orientations'] = apartment_orientations.to_dict('records')
             
-            # Generate updated plot
+            # Generate updated plot with interactive positions
             room_polygons = deserialize_rooms(session.get('room_polygons', []))
             if len(room_polygons) == len(room_df):
                 room_df['polygon'] = room_polygons
-                updated_plot_b64 = visualizer.plot_clusters(room_df, use_final_names=True)
+                updated_plot_b64, room_positions = visualizer.plot_clusters_with_positions(room_df, use_final_names=True)
             else:
                 updated_plot_b64 = generate_placeholder_image("Updated Room Names", 800, 600)
+                room_positions = []
             
             return jsonify({
                 'success': True,
                 'updated_plot': updated_plot_b64,
+                'room_positions': room_positions,
                 'summary': {
                     'apartments_configured': len(apartment_orientations),
                     'total_rooms_named': len(room_df),
@@ -421,7 +423,16 @@ def step2():
         
         room_df = pd.DataFrame(room_df_records)
         
-        # Prepare data for template
+        # Generate plot with positions for interactive overlay
+        room_polygons = deserialize_rooms(session.get('room_polygons', []))
+        if len(room_polygons) == len(room_df):
+            room_df['polygon'] = room_polygons
+            cluster_plot, room_positions = visualizer.plot_clusters_with_positions(room_df, use_final_names=True)
+        else:
+            cluster_plot = generate_placeholder_image("Room Layout", 800, 600)
+            room_positions = []
+        
+        # Prepare data for template (existing form-based editing)
         apartments = []
         for apt_name, group in room_df.groupby('apartment_name'):
             rooms = [
@@ -437,10 +448,11 @@ def step2():
                 'rooms': rooms
             })
         
-        cluster_plot = session.get('cluster_plot', '')
-        
-        return render_template('step2.html', apartments=apartments, cluster_plot=cluster_plot)
-    
+        return render_template('step2.html', 
+                             apartments=apartments, 
+                             cluster_plot=cluster_plot,
+                             room_positions=room_positions)
+
     except Exception as e:
         print(f"Error in step2 GET: {str(e)}")
         return redirect(url_for('step1'))
@@ -1592,12 +1604,7 @@ def visualize_apartment():
         
         # Create group mapping following Colab exactly
         group_mapping, tile_specs_to_groups = matching_processor.create_group_based_tile_mapping(clean_tables)
-        
-        # Debug: Print some mapping info
-        print(f"Group mapping keys: {list(group_mapping.keys())[:10]}")
-        print(f"Tile specs keys: {list(tile_specs_to_groups.keys())[:5]}")
-        print(f"Apartment tiles count: {len(apt_tiles)}")
-        
+              
         # Call the visualizer method following Colab Step 9
         match_type_counts = visualizer.visualize_apartment_tiles(
             apartment_name, 
@@ -2201,61 +2208,6 @@ def navigate(step):
     else:
         return redirect(url_for('index'))
     
-@app.route('/debug/room_names')
-def debug_room_names():
-    """Debug route to check room name consistency"""
-    try:
-        # Get data from session
-        tile_classification_results = session.get('tile_classification_results', {})
-        tiles_df = pd.DataFrame(tile_classification_results['tiles_df'])
-        
-        current_matching = session.get('current_matching')
-        debug_info = {
-            'tile_room_names': {},
-            'matching_room_names': {},
-            'message': 'Room name consistency check completed'
-        }
-        
-        if tiles_df.empty:
-            debug_info['message'] = 'No tile data found'
-            return jsonify(debug_info)
-        
-        print("=== ROOM NAME CONSISTENCY CHECK ===")
-        
-        # Check tile data room names
-        print("Room names in tile data:")
-        for apt in tiles_df['apartment_name'].unique():
-            apt_tiles = tiles_df[tiles_df['apartment_name'] == apt]
-            room_names = apt_tiles['room_name'].unique().tolist()
-            debug_info['tile_room_names'][apt] = room_names
-            print(f"  {apt}: {room_names}")
-        
-        # Check matching data room names
-        print("\nRoom names in matching data:")
-        if current_matching:
-            clean_tables = current_matching.get('clean_tables', {})
-            
-            for table_name, table_data in clean_tables.items():
-                if isinstance(table_data, list) and len(table_data) > 0:
-                    df = pd.DataFrame(table_data)
-                    if 'Location' in df.columns and 'Apartment' in df.columns:
-                        for apt in df['Apartment'].unique():
-                            apt_data = df[df['Apartment'] == apt]
-                            locations = apt_data['Location'].unique().tolist()
-                            
-                            if apt not in debug_info['matching_room_names']:
-                                debug_info['matching_room_names'][apt] = {}
-                            debug_info['matching_room_names'][apt][table_name] = locations
-                            print(f"  {table_name} - {apt}: {locations}")
-        
-        print("=== END CONSISTENCY CHECK ===")
-        
-        return jsonify(debug_info)
-        
-    except Exception as e:
-        print(f"Error in consistency check: {e}")
-        return jsonify({'error': str(e)})
-
 @app.route('/download/<filename>')
 def download_file(filename):
     """Download exported file"""
@@ -2366,6 +2318,63 @@ def clear_session_route():
         })
     except Exception as e:
         return jsonify({'error': f'Error clearing session: {str(e)}'})
+    
+@app.route('/update_room_name', methods=['POST'])
+@login_required
+def update_room_name():
+    """Update individual room name via AJAX"""
+    try:
+        data = request.get_json()
+        room_id = int(data.get('room_id'))
+        new_name = data.get('new_name', '').strip()
+        
+        if not new_name:
+            return jsonify({'error': 'Room name cannot be empty'})
+        
+        # Update room_df in session
+        room_df = pd.DataFrame(session.get('room_df', []))
+        
+        if room_df.empty:
+            return jsonify({'error': 'No room data available'})
+        
+        # Find and update the room
+        mask = room_df['room_id'] == room_id
+        if not mask.any():
+            return jsonify({'error': 'Room not found'})
+        
+        old_name = room_df.loc[mask, 'room_name'].iloc[0]
+        room_df.loc[mask, 'room_name'] = new_name
+        
+        # Update session
+        session['room_df'] = room_df.to_dict('records')
+        
+        return jsonify({
+            'success': True,
+            'message': f'Room name updated from "{old_name}" to "{new_name}"',
+            'old_name': old_name,
+            'new_name': new_name
+        })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Error updating room name: {str(e)}'})
+
+@app.route('/toggle_edit_mode', methods=['POST'])
+@login_required
+def toggle_edit_mode():
+    """Toggle between view and edit mode"""
+    try:
+        data = request.get_json()
+        edit_mode = data.get('edit_mode', False)
+        
+        # Store edit mode preference in session if needed
+        session['edit_mode'] = edit_mode
+        
+        return jsonify({'success': True, 'edit_mode': edit_mode})
+        
+    except Exception as e:
+        return jsonify({'error': f'Error toggling edit mode: {str(e)}'})
 
 @app.route('/finish-project', methods=['POST'])
 @login_required

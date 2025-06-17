@@ -966,3 +966,80 @@ class VisualizationProcessor:
         print(f"   Unmatched cuts: {match_type_counts['Unmatched']}")
         
         return match_type_counts
+    
+    def plot_clusters_with_positions(self, clusters_df, use_final_names=False):
+        """Generate plot and return room positions for interactive overlay"""
+        import matplotlib.pyplot as plt
+        import io
+        import base64
+        
+        # Create the plot exactly like the original plot_clusters method
+        plt.figure(figsize=(14, 14))
+        unique_clusters = clusters_df['apartment_cluster'].unique()
+
+        if use_final_names and 'apartment_name' in clusters_df.columns:
+            apartment_names = clusters_df.groupby('apartment_cluster')['apartment_name'].first().to_dict()
+            self.apartment_names.update(apartment_names)
+        else:
+            apartment_names = {cluster_id: f"Apartment {cluster_id+1}" for cluster_id in unique_clusters}
+
+        # Track plot bounds for coordinate conversion
+        all_x_coords = []
+        all_y_coords = []
+        room_positions = []
+
+        for cluster_id in unique_clusters:
+            cluster_rooms = clusters_df[clusters_df['apartment_cluster'] == cluster_id]
+            color = self.get_color(cluster_id)
+            apt_name = self.apartment_names.get(cluster_id, apartment_names.get(cluster_id, f"Apartment {cluster_id+1}"))
+            
+            for idx, row in cluster_rooms.iterrows():
+                polygon = row['polygon']
+                x, y = polygon.exterior.xy
+                plt.fill(x, y, alpha=0.6, label=apt_name if idx == cluster_rooms.index[0] else "", color=color)
+                
+                # DON'T plot the text on matplotlib anymore - we'll overlay it
+                # plt.text(row['centroid_x'], row['centroid_y'], row['room_name'], fontsize=8, ha='center', color='black')
+                
+                # Collect coordinates for bounds calculation
+                all_x_coords.extend(x)
+                all_y_coords.extend(y)
+                
+                # Store room position data for overlay (convert numpy types to native Python)
+                room_positions.append({
+                    'room_id': int(row['room_id']),
+                    'room_name': str(row['room_name']),
+                    'apartment_name': str(row.get('apartment_name', apt_name)),
+                    'centroid_x': float(row['centroid_x']),
+                    'centroid_y': float(row['centroid_y']),
+                    'apartment_cluster': int(cluster_id)
+                })
+
+        plt.title("🏢 Apartment Clusters with Room Names")
+        plt.legend()
+        plt.grid(True)
+        
+        # Get the current axis limits to calculate percentage positions
+        ax = plt.gca()
+        x_min, x_max = ax.get_xlim()
+        y_min, y_max = ax.get_ylim()
+        
+        # Calculate plot dimensions
+        plot_width = x_max - x_min
+        plot_height = y_max - y_min
+        
+        # Convert room positions to percentage coordinates for overlay
+        for room in room_positions:
+            # Convert to percentage coordinates (0-100)
+            # Note: Y coordinates are flipped for web display (top = 0)
+            room['x_percent'] = float(((room['centroid_x'] - x_min) / plot_width) * 100)
+            room['y_percent'] = float(((y_max - room['centroid_y']) / plot_height) * 100)  # Flip Y axis
+        
+        # Convert plot to base64 string
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png', bbox_inches='tight', dpi=150)
+        plt.close()
+        buf.seek(0)
+        plot_b64 = base64.b64encode(buf.read()).decode('utf-8')
+        
+        return plot_b64, room_positions
