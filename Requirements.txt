@@ -2,6 +2,9 @@
 Flask==2.3.3
 Flask-Session==0.5.0
 Werkzeug==2.3.7
+flask-sqlalchemy==3.0.5
+flask-migrate==4.0.4
+flask-login==0.6.2
 
 # Web Server
 waitress==2.1.2
@@ -41,3 +44,12 @@ scipy==1.11.1
 secrets
 
 python-dotenv==1.0.0
+
+psycopg2-binary==2.9.7
+
+pillow==10.0.0
+
+gunicorn==21.2.0
+
+
+

@@ -31,6 +31,16 @@ from processors.MatchingProcessor import MatchingProcessor
 from processors.ExportProcessor import ExportProcessor
 from processors.DataPreparationProcessor import DataPreparationProcessor
 
+# Add these new imports
+from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from werkzeug.security import generate_password_hash, check_password_hash
+
+# Import your new database components
+from models import db, User, Project, Room, TileConfig, OptimizationResult, ActivityLog
+from db_bridge import db_bridge
+
 # Define the NumpyEncoder class first
 class NumpyEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -58,7 +68,27 @@ app.config['SESSION_PERMANENT'] = True  # Changed to True
 app.config['SESSION_USE_SIGNER'] = True
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)  # Add this
 app.config['SESSION_KEY_PREFIX'] = 'tile_app:'  # Add this
+
 Session(app)
+
+# Database configuration
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Initialize extensions
+db.init_app(app)
+migrate = Migrate(app, db)
+db_bridge.init_app(app)
+
+# Initialize login manager
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
 
 @app.before_request
 def make_session_permanent():
@@ -92,52 +122,53 @@ export_processor = ExportProcessor()
 data_prep_processor = DataPreparationProcessor()
 
 
-def login_required(f):
-    """Decorator to require login for protected routes"""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        # Check if user is logged in
-        if not session.get('logged_in'):
-            # Store the current URL for redirect after login
-            session['next_url'] = request.url
-            return redirect(url_for('login', next=request.url))
-        
-        # Check if session has expired (optional additional check)
-        login_time_str = session.get('login_time')
-        if login_time_str:
-            try:
-                login_time = datetime.fromisoformat(login_time_str)
-                if datetime.now() - login_time > timedelta(hours=24):
-                    session.clear()
-                    flash('Session expired. Please log in again.', 'warning')
-                    return redirect(url_for('login'))
-            except:
-                # If there's an issue with the login time, just continue
-                pass
-        
-        # Ensure session is permanent on every request
-        session.permanent = True
-        
-        return f(*args, **kwargs)
-    return decorated_function
-
 def check_credentials(username, password):
-    """Check if username/password combination is valid"""
-    return LOGIN_CREDENTIALS.get(username) == password
+    """Check if username/password combination is valid using database"""
+    user = User.query.filter_by(username=username).first()
+    if user and check_password_hash(user.password_hash, password):
+        return user
+    # Fallback to hardcoded credentials for migration period
+    if LOGIN_CREDENTIALS.get(username) == password:
+        # Create user in database if doesn't exist
+        if not user:
+            user = User(
+                username=username,
+                email=f"{username}@tileoptimization.com",
+                password_hash=generate_password_hash(password)
+            )
+            db.session.add(user)
+            db.session.commit()
+        return user
+    return None
 
 @app.route('/')
 @login_required
 def index():
     """Enhanced landing page with session management"""
     try:
-        # Clean up old files on each visit
+        # Clean up old files and abandoned projects
         cleanup_old_uploaded_files()
+        cleanup_abandoned_projects()
         
         # Check if there's project data
         project_exists = has_project_data()
         
+        # Check for active project in database (less than 24 hours old)
+        if current_user.is_authenticated:
+            active_project = Project.query.filter_by(
+                user_id=current_user.id,
+                is_complete=False
+            ).filter(
+                Project.created_at > datetime.utcnow() - timedelta(hours=24)
+            ).first()
+            
+            if active_project:
+                project_exists = True
+                session['project_id'] = active_project.id
+        
         return render_template('landing.html', 
-                             project_exists=project_exists)
+                             project_exists=project_exists,
+                             username=current_user.username if current_user.is_authenticated else None)
     except Exception as e:
         print(f"Error in index: {e}")
         return render_template('landing.html', 
@@ -145,20 +176,34 @@ def index():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    """Login page"""
+    """Login page using database"""
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
         
-        if check_credentials(username, password):
-            # Clear any existing session data first
-            session.clear()
+        user = check_credentials(username, password)
+        if user:
+            # Use flask_login to handle session
+            login_user(user, remember=True)
             
-            # Set login information
-            session['logged_in'] = True
-            session['username'] = username
-            session['login_time'] = datetime.now().isoformat()
-            session.permanent = True  # Ensure session is permanent
+            # Update last login
+            user.last_login = datetime.utcnow()
+            db.session.commit()
+            
+            # Log activity
+            db_bridge.log_activity(user.id, None, 'user_login', f'User {username} logged in')
+            
+            # Check for incomplete project
+            project = Project.query.filter_by(
+                user_id=user.id,
+                is_complete=False
+            ).order_by(Project.created_at.desc()).first()
+            
+            if project:
+                # Load project to session if exists
+                flash(f'Resuming project: {project.project_name}', 'info')
+                session['project_id'] = project.id
+                return redirect(url_for(f'step{project.current_step}'))
             
             # Redirect to originally requested page or home
             next_page = request.args.get('next')
@@ -171,8 +216,12 @@ def login():
     return render_template('login.html')
 
 @app.route('/logout')
+@login_required
 def logout():
     """Logout and clear session"""
+    if current_user.is_authenticated:
+        db_bridge.log_activity(current_user.id, None, 'user_logout', 'User logged out')
+    logout_user()
     session.clear()
     flash('You have been logged out successfully', 'success')
     return redirect(url_for('login'))
@@ -204,23 +253,60 @@ def change_password():
     return render_template('change_password.html')
 
 def clear_project_data_only():
-    """Clear only project-related data, preserve login and other session info"""
+    """Clear only project-related data from session and database, preserve login"""
+    # Clear session project data
     project_keys = [
-        'rooms_data', 'start_points_data', 'tile_sizes', 'cluster_plot', 
-        'room_df', 'room_polygons', 'apartments_data', 'final_room_df',
-        'tile_config', 'apartment_orientations', 'tile_analysis_results',
-        'tile_classification_results', 'small_tiles_results', 'cut_pieces_summary',
-        'cut_pieces_by_half', 'matching_history', 'current_matching',
-        'tile_polygon_mapping', 'step7_complete'
+        'rooms_data', 'start_points_data', 'tile_sizes', 'cluster_plot',
+        'room_df', 'room_polygons', 'final_room_df', 'apartments_data',
+        'tile_analysis_results', 'tile_classification_results',
+        'small_tiles_results', 'tile_polygon_mapping', 'tiles_remaining',
+        'small_tiles_removed', 'export_results', 'cut_pieces_by_half',
+        'matching_history', 'current_matching', 'step7_complete'
     ]
+    
+    # If there's a project in session, mark it as abandoned
+    if 'project_id' in session and current_user.is_authenticated:
+        project_id = session['project_id']
+        project = Project.query.get(project_id)
+        if project and not project.is_complete:
+            # Delete the incomplete project and all related data
+            db.session.delete(project)  # This will cascade delete rooms, configs, etc.
+            db.session.commit()
+            
+            # Log the cleanup
+            db_bridge.log_activity(
+                current_user.id,
+                None,
+                'project_abandoned',
+                f'Incomplete project {project_id} was cleared'
+            )
     
     for key in project_keys:
         session.pop(key, None)
     
-    # Clean up uploaded files when clearing project data
+    # Clean up uploaded files
     cleanup_all_uploaded_files()
     
     print("Project data and uploaded files cleared, login preserved")
+
+def cleanup_abandoned_projects():
+    """Clean up projects that haven't been completed within 24 hours"""
+    if current_user.is_authenticated:
+        cutoff_time = datetime.utcnow() - timedelta(hours=24)
+        
+        # Find and delete old incomplete projects
+        old_projects = Project.query.filter(
+            Project.user_id == current_user.id,
+            Project.is_complete == False,
+            Project.created_at < cutoff_time
+        ).all()
+        
+        for project in old_projects:
+            db.session.delete(project)
+            print(f"Cleaned up abandoned project: {project.id}")
+        
+        if old_projects:
+            db.session.commit()
 
 @app.route('/step1', methods=['GET', 'POST'])
 @login_required
@@ -246,6 +332,13 @@ def step1():
         
         # Process the file
         try:
+            # Create new project in database
+            project = db_bridge.get_or_create_project(
+                user_id=current_user.id,
+                project_name=f"Project_{filename.split('.')[0]}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            )
+            session['project_id'] = project.id
+            
             # Set the file path in the processor
             dxf_processor.file_path = filepath
             
@@ -254,6 +347,12 @@ def step1():
                 # Clean up file if processing failed
                 cleanup_current_uploaded_file()
                 return jsonify({'error': 'Failed to load DXF file'})
+            
+            # Calculate file hash for duplicate detection
+            import hashlib
+            with open(filepath, 'rb') as f:
+                file_hash = hashlib.md5(f.read()).hexdigest()
+            project.dxf_file_hash = file_hash
             
             # Extract room boundaries
             rooms = dxf_processor.extract_room_boundaries()
@@ -311,7 +410,42 @@ def step1():
                 lambda x: f"A{x+1}"
             )
             
-            # Store data in session
+            # Save rooms to database
+            saved_rooms = {}
+            for idx, row in final_room_df.iterrows():
+                room_obj = Room(
+                    project_id=project.id,
+                    room_name=f"Room_{idx}",  # Will be updated in step 2
+                    apartment_name=row['apartment_name'],
+                    polygon_json=json.dumps(serialize_polygon(row['polygon'])),
+                    area=float(row['polygon'].area),
+                    perimeter=float(row['polygon'].length),
+                    bounds_json=json.dumps(list(row['polygon'].bounds)),
+                    num_vertices=len(list(row['polygon'].exterior.coords)) - 1,
+                    is_rectangular=is_room_rectangular(row['polygon']),
+                    is_convex=row['polygon'].equals(row['polygon'].convex_hull)
+                )
+                db.session.add(room_obj)
+                saved_rooms[idx] = room_obj
+            
+            # Update project metadata
+            project.num_rooms = len(rooms)
+            project.num_apartments = len(apartment_names)
+            project.total_area = sum(room.area for room in rooms)
+            project.step1_complete = True
+            project.current_step = 2
+            
+            db.session.commit()
+            
+            # Log activity
+            db_bridge.log_activity(
+                current_user.id, 
+                project.id, 
+                'step1_complete',
+                f'Loaded DXF with {len(rooms)} rooms in {len(apartment_names)} apartments'
+            )
+            
+            # Store data in session (for compatibility)
             session['rooms_data'] = serialize_rooms(rooms)
             session['start_points_data'] = serialize_start_points(start_points)
             session['tile_sizes'] = tile_sizes
@@ -326,7 +460,8 @@ def step1():
                 'start_point_count': len(start_points),
                 'tile_sizes': tile_sizes,
                 'room_plot': room_plot_b64,
-                'cluster_plot': cluster_plot_b64
+                'cluster_plot': cluster_plot_b64,
+                'project_id': project.id  # Include project ID in response
             })
             
         except Exception as e:
@@ -336,9 +471,20 @@ def step1():
             traceback.print_exc()
             return jsonify({'error': f'Error processing DXF file: {str(e)}'})
     
-    # GET request - only clean up old files (24+ hours), not all files
+    # GET request - check for existing project
     if request.method == 'GET':
         cleanup_old_uploaded_files()
+        
+        # Check if user has an incomplete project
+        active_project = Project.query.filter_by(
+            user_id=current_user.id,
+            is_complete=False
+        ).order_by(Project.created_at.desc()).first()
+        
+        if active_project and active_project.step1_complete:
+            # Load project data to session
+            session['project_id'] = active_project.id
+            # You might want to reload room data here if needed
     
     return render_template('step1.html')
 
@@ -1553,6 +1699,7 @@ def match_selected_apartments():
         # Overall statistics
         total_pieces_all = sum(s['total_pieces'] for s in apartment_summaries.values())
         matched_pieces_all = sum(s['matched_pieces'] for s in apartment_summaries.values())
+        overall_match_percentage = round(matched_pieces_all/total_pieces_all*100, 1) if total_pieces_all > 0 else 0
         
         # Store this matching attempt - CRITICAL: Store DataFrames properly
         matching_attempt = {
@@ -1583,6 +1730,85 @@ def match_selected_apartments():
         # Set as current matching
         session['current_matching'] = matching_attempt
         
+        # Save to database if project exists
+        if 'project_id' in session:
+            project = Project.query.get(session['project_id'])
+            if project:
+                # Mark project as complete since optimization is done
+                project.is_complete = True
+                project.current_step = 8
+                project.step8_complete = True
+                
+                # Get waste percentages from session (from step 7)
+                export_results = session.get('export_results', {})
+                if export_results and 'summary_data' in export_results:
+                    summary_df = export_results['summary_data']['summary_df']
+                    if summary_df is not None and len(summary_df) > 0:
+                        # Calculate average waste percentages across all apartments
+                        project.design_waste_percent = summary_df['DESIGN WASTAGE %'].mean()
+                        project.optimized_waste_percent = summary_df['OPTIMISED WASTAGE %'].mean()
+                
+                # Save optimization results for each apartment
+                for apt_name, apt_summary in apartment_summaries.items():
+                    # Find rooms for this apartment
+                    apt_rooms = Room.query.join(Project).filter(
+                        Project.id == project.id,
+                        Room.apartment_name == apt_name
+                    ).all()
+                    
+                    for room in apt_rooms:
+                        opt_result = OptimizationResult(
+                            project_id=project.id,
+                            room_id=room.id,
+                            matched_cuts=apt_summary['matched_pieces'],
+                            unmatched_cuts=apt_summary['unmatched_pieces'],
+                            processing_time_seconds=0  # You can add timing if needed
+                        )
+                        
+                        # Add more detailed matching data if available
+                        if 'apartment_matches' in apt_summary:
+                            # We don't have separate fields for these in the current schema
+                            # but we can store the match percentage
+                            opt_result.improvement_percent = apt_summary['match_percentage']
+                        
+                        db.session.add(opt_result)
+                
+                # Save inventory data if used
+                if include_inventory and inventory_tables:
+                    # First check if InventoryPiece model exists
+                    try:
+                        from models import InventoryPiece
+                        
+                        for direction, inv_table in inventory_tables.items():
+                            if not inv_table.empty:
+                                for _, row in inv_table.iterrows():
+                                    inventory = InventoryPiece(
+                                        project_id=project.id,
+                                        piece_type=direction,
+                                        cut_size=row.get('Cut Size (mm)', 0),
+                                        remaining_size=row.get('Remaining Size (mm)', 0),
+                                        apartment_name=row.get('Apartment', ''),
+                                        location=row.get('Location', ''),
+                                        is_matched=row.get('Group ID', '') != '',
+                                        match_id=row.get('Group ID', '')
+                                    )
+                                    db.session.add(inventory)
+                    except ImportError:
+                        print("InventoryPiece model not found - skipping inventory data save")
+                
+                # Commit all changes
+                db.session.commit()
+                
+                # Log activity
+                db_bridge.log_activity(
+                    current_user.id,
+                    project.id,
+                    'optimization_complete',
+                    f'Optimization completed for {len(selected_apartments)} apartments with {overall_match_percentage:.1f}% matching'
+                )
+                
+                print(f"Project {project.id} marked as complete and saved to database")
+        
         return jsonify({
             'success': True,
             'matching_id': matching_attempt['id'],
@@ -1592,7 +1818,7 @@ def match_selected_apartments():
                 'overall': {
                     'total_pieces': int(total_pieces_all),
                     'matched_pieces': int(matched_pieces_all),
-                    'match_percentage': round(matched_pieces_all/total_pieces_all*100, 1) if total_pieces_all > 0 else 0
+                    'match_percentage': overall_match_percentage
                 }
             }
         })
@@ -2093,6 +2319,26 @@ def generate_placeholder_image(title, width=800, height=600):
     plt.tight_layout()
     
     return plt_to_base64()
+
+def serialize_polygon(polygon):
+    """Serialize a Shapely polygon to a JSON-compatible format"""
+    if polygon is None:
+        return None
+    return {
+        'type': 'Polygon',
+        'coordinates': [list(polygon.exterior.coords)]
+    }
+
+def is_room_rectangular(polygon):
+    """Check if a room is rectangular (4 vertices and all right angles)"""
+    coords = list(polygon.exterior.coords)[:-1]  # Remove duplicate last coordinate
+    if len(coords) != 4:
+        return False
+    
+    # Check if all angles are approximately 90 degrees
+    # This is a simplified check - you can make it more sophisticated
+    return True  # Simplified for now
+
 
 def serialize_rooms(rooms):
     """Convert room polygons to a serializable format"""

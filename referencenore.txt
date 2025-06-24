@@ -79,3 +79,231 @@ git commit -m "Your message"
 
 # Push to GitHub
 git push origin main
+
+
+
+
+# add_user.py - Create this file when you need to add users
+from app import app, db
+from models import User
+from werkzeug.security import generate_password_hash
+
+def add_user(username, password, email):
+    with app.app_context():
+        user = User(
+            username=username,
+            email=email,
+            password_hash=generate_password_hash(password)
+        )
+        db.session.add(user)
+        db.session.commit()
+        print(f"✅ User {username} added successfully")
+
+if __name__ == '__main__':
+    add_user('new_user', 'password123', 'user@example.com')
+
+python add_user.py
+
+
+from app import app, db
+from models import User, Project, Room, ActivityLog
+from datetime import datetime
+
+def check_database_data():
+    with app.app_context():
+        print("\n=== DATABASE CHECK ===")
+        
+        # Check users
+        users = User.query.all()
+        print(f"\nTotal Users: {len(users)}")
+        for user in users:
+            print(f"  - {user.username} (ID: {user.id})")
+        
+        # Check projects
+        projects = Project.query.all()
+        print(f"\nTotal Projects: {len(projects)}")
+        for project in projects:
+            print(f"  - {project.project_name} (ID: {project.id})")
+            print(f"    User: {project.user.username}")
+            print(f"    Rooms: {project.num_rooms}")
+            print(f"    Apartments: {project.num_apartments}")
+            print(f"    Created: {project.created_at}")
+            print(f"    Step 1 Complete: {project.step1_complete}")
+        
+        # Check rooms
+        rooms = Room.query.all()
+        print(f"\nTotal Rooms: {len(rooms)}")
+        if rooms:
+            print(f"First 5 rooms:")
+            for room in rooms[:5]:
+                print(f"  - {room.room_name} in {room.apartment_name}")
+                print(f"    Area: {room.area:.2f}")
+                print(f"    Vertices: {room.num_vertices}")
+        
+        # Check activity log
+        activities = ActivityLog.query.order_by(ActivityLog.created_at.desc()).limit(5).all()
+        print(f"\nRecent Activities:")
+        for activity in activities:
+            print(f"  - {activity.created_at}: {activity.action} by User {activity.user_id}")
+            if activity.details:
+                print(f"    Details: {activity.details}")
+
+if __name__ == '__main__':
+    check_database_data()
+
+
+python check_data.py
+
+
+=========================
+Monitor storage
+=========================
+
+from app import app, db
+from models import Project, Room, OptimizationResult
+from datetime import datetime, timedelta
+
+def check_storage_usage():
+    with app.app_context():
+        # Count records
+        projects = Project.query.count()
+        rooms = Room.query.count()
+        optimizations = OptimizationResult.query.count()
+        
+        print(f"\n=== STORAGE MONITORING ===")
+        print(f"Projects: {projects}")
+        print(f"Rooms: {rooms}")
+        print(f"Optimization Results: {optimizations}")
+        
+        # Estimate storage (rough calculation)
+        estimated_mb = (projects * 0.1 + rooms * 0.05 + optimizations * 0.05)
+        print(f"\nEstimated Storage: {estimated_mb:.2f} MB")
+        print(f"Free Tier Limit: 3,072 MB")
+        print(f"Usage: {(estimated_mb/3072)*100:.1f}%")
+        
+        # At this rate, how many projects can you store?
+        if projects > 0:
+            mb_per_project = estimated_mb / projects
+            max_projects = 3072 / mb_per_project
+            print(f"\nCan store approximately {int(max_projects):,} total projects")
+
+if __name__ == '__main__':
+    check_storage_usage()
+
+=============================
+Python monitor_storage.py
+========================
+
+==============================
+SQL Backup via Neon
+--------------
+
+-- Export specific tables
+COPY (SELECT * FROM projects WHERE is_complete = true) 
+TO STDOUT WITH CSV HEADER;
+
+COPY (SELECT * FROM rooms) 
+TO STDOUT WITH CSV HEADER;
+===============================
+
+
+
+======================
+Test DB 
+---------------
+import os
+from dotenv import load_dotenv
+from flask import Flask
+from models import db, User, Project
+from datetime import datetime
+
+# Load environment variables
+load_dotenv()
+
+# Create a test Flask app
+app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Initialize database with app
+db.init_app(app)
+
+# Test the connection
+with app.app_context():
+    try:
+        # Test connection
+        db.create_all()
+        print("✅ Database connection successful!")
+        
+        # Test query
+        user_count = User.query.count()
+        print(f"Users in database: {user_count}")
+        
+        project_count = Project.query.count()
+        print(f"Projects in database: {project_count}")
+        
+        # Try to query a table
+        test_query = db.session.execute("SELECT 1")
+        print("✅ Can execute queries successfully!")
+        
+    except Exception as e:
+        print(f"❌ Database error: {e}")
+
+-------------------------
+test_db.py
+
+==============================
+
+
+=============================
+create admin
+------------------
+
+from app import app, db
+from models import User
+from werkzeug.security import generate_password_hash
+
+def create_admin_user():
+    with app.app_context():
+        # Create all tables
+        db.create_all()
+        print("✅ Database tables created/verified")
+        
+        # Check if admin exists
+        admin = User.query.filter_by(username='admin').first()
+        if not admin:
+            # Create admin user
+            admin = User(
+                username='admin',
+                email='admin@tileoptimization.com',
+                password_hash=generate_password_hash('admin123'),
+                role='admin'
+            )
+            db.session.add(admin)
+            db.session.commit()
+            print("✅ Admin user created (username: admin, password: admin123)")
+        else:
+            print("ℹ️ Admin user already exists")
+        
+        # Migrate existing users from LOGIN_CREDENTIALS
+        from app import LOGIN_CREDENTIALS
+        for username, password in LOGIN_CREDENTIALS.items():
+            user = User.query.filter_by(username=username).first()
+            if not user:
+                user = User(
+                    username=username,
+                    email=f"{username}@tileoptimization.com",
+                    password_hash=generate_password_hash(password)
+                )
+                db.session.add(user)
+                print(f"✅ Created user: {username}")
+        
+        db.session.commit()
+        print("✅ All users migrated to database")
+
+if __name__ == '__main__':
+    create_admin_user()
+
+---------------------------------
+create_admin.py
+=====================================
