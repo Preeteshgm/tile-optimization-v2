@@ -291,9 +291,6 @@ class TileProcessor {
         return stats;
     }
 
-
-    
-
     /**
      * Generate example data for small cuts
      * @returns {Object} Example small cuts data

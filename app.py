@@ -77,7 +77,9 @@ LOGIN_CREDENTIALS = {
     'J384_TileOptz': 'J384',        # New account
     'J386_TileOptz': 'J386',        # New account
     'J385_TileOptz': 'J385',        # New account  
-    'J388_TileOptz': 'J388'         # New account
+    'J388_TileOptz': 'J388',        # New account
+    'J390_TileOptz': 'J390',        # New account
+    'TestDemo2025': 'TDemo25'       # Test Account
 }
 
 # Initialize processors as global objects
