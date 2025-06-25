@@ -413,12 +413,17 @@ def step1():
             # Save rooms to database
             saved_rooms = {}
             for idx, row in final_room_df.iterrows():
+                # Convert area if it's in mm²
+                room_area = float(row['polygon'].area)
+                if room_area > 10000:  # Likely mm² if greater than 10,000
+                    room_area = room_area / 1000000  # Convert mm² to m²
+                
                 room_obj = Room(
                     project_id=project.id,
                     room_name=f"Room_{idx}",  # Will be updated in step 2
                     apartment_name=row['apartment_name'],
                     polygon_json=json.dumps(serialize_polygon(row['polygon'])),
-                    area=float(row['polygon'].area),
+                    area=room_area,  # Use converted area
                     perimeter=float(row['polygon'].length),
                     bounds_json=json.dumps(list(row['polygon'].bounds)),
                     num_vertices=len(list(row['polygon'].exterior.coords)) - 1,
@@ -428,10 +433,18 @@ def step1():
                 db.session.add(room_obj)
                 saved_rooms[idx] = room_obj
             
-            # Update project metadata
+            # Update project metadata with proper unit conversion
+            total_area_sum = 0
+            for room in rooms:
+                room_area = room.area
+                # Check if area is likely in mm² (very large number)
+                if room_area > 10000:  # Likely mm² if greater than 10,000
+                    room_area = room_area / 1000000  # Convert mm² to m²
+                total_area_sum += room_area
+            
             project.num_rooms = len(rooms)
             project.num_apartments = len(apartment_names)
-            project.total_area = sum(room.area for room in rooms)
+            project.total_area = total_area_sum  # Now properly converted to m²
             project.step1_complete = True
             project.current_step = 2
             
