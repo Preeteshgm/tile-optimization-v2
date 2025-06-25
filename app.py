@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 import json
 import re
+from functools import wraps
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -38,8 +39,9 @@ from flask_login import LoginManager, UserMixin, login_user, logout_user, login_
 from werkzeug.security import generate_password_hash, check_password_hash
 
 # Import your new database components
-from models import db, User, Project, Room, TileConfig, OptimizationResult, ActivityLog
+from models import db, User, Project, Room, TileConfig, OptimizationResult, ActivityLog, ProjectArchive, UserDashboard
 from db_bridge import db_bridge
+from services.project_manager import ProjectManager
 
 # Define the NumpyEncoder class first
 class NumpyEncoder(json.JSONEncoder):
@@ -89,11 +91,20 @@ login_manager.login_view = 'login'
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-
 @app.before_request
 def make_session_permanent():
     """Make sessions permanent to prevent logout between steps"""
     session.permanent = True
+
+def admin_required(f):
+    @wraps(f)
+    @login_required
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated or current_user.role != 'admin':
+            flash('You need admin privileges to access this page.', 'error')
+            return redirect(url_for('index'))
+        return f(*args, **kwargs)
+    return decorated_function
 
 # Upload folder configuration
 app.config['UPLOAD_FOLDER'] = 'uploads'
@@ -252,8 +263,12 @@ def change_password():
     
     return render_template('change_password.html')
 
+
+
 def clear_project_data_only():
     """Clear only project-related data from session and database, preserve login"""
+    from services.project_manager import ProjectManager
+    
     # Clear session project data
     project_keys = [
         'rooms_data', 'start_points_data', 'tile_sizes', 'cluster_plot',
@@ -261,33 +276,51 @@ def clear_project_data_only():
         'tile_analysis_results', 'tile_classification_results',
         'small_tiles_results', 'tile_polygon_mapping', 'tiles_remaining',
         'small_tiles_removed', 'export_results', 'cut_pieces_by_half',
-        'matching_history', 'current_matching', 'step7_complete'
+        'matching_history', 'current_matching', 'step7_complete',
+        'project_id', 'uploaded_file', 'dxf_data', 'step1_complete',
+        'step2_complete', 'step3_complete', 'step4_complete', 'step5_complete',
+        'step6_complete', 'step8_complete', 'step9_complete'
     ]
     
     # If there's a project in session, mark it as abandoned
     if 'project_id' in session and current_user.is_authenticated:
         project_id = session['project_id']
         project = Project.query.get(project_id)
-        if project and not project.is_complete:
-            # Delete the incomplete project and all related data
-            db.session.delete(project)  # This will cascade delete rooms, configs, etc.
-            db.session.commit()
+        
+        if project:
+            # Archive the project before deletion (for AI training)
+            try:
+                ProjectManager.archive_project(project)
+                print(f"Project {project_id} archived successfully")
+            except Exception as e:
+                print(f"Failed to archive project {project_id}: {str(e)}")
             
-            # Log the cleanup
-            db_bridge.log_activity(
-                current_user.id,
-                None,
-                'project_abandoned',
-                f'Incomplete project {project_id} was cleared'
-            )
+            # Delete the incomplete project and all related data
+            if not project.is_complete:
+                db.session.delete(project)  # This will cascade delete rooms, configs, etc.
+                db.session.commit()
+                
+                # Update user dashboard statistics
+                try:
+                    ProjectManager.update_user_dashboard(current_user.id)
+                except Exception as e:
+                    print(f"Failed to update dashboard: {str(e)}")
     
+    # Clear all project-related session data
     for key in project_keys:
         session.pop(key, None)
     
-    # Clean up uploaded files
-    cleanup_all_uploaded_files()
+    # Clear any uploaded files
+    if 'uploaded_file' in session:
+        try:
+            filepath = session.get('uploaded_file')
+            if filepath and os.path.exists(filepath):
+                os.remove(filepath)
+                print(f"Removed uploaded file: {filepath}")
+        except Exception as e:
+            print(f"Error removing file: {str(e)}")
     
-    print("Project data and uploaded files cleared, login preserved")
+    print("Project data cleared, login preserved")
 
 def cleanup_abandoned_projects():
     """Clean up projects that haven't been completed within 24 hours"""
@@ -308,9 +341,195 @@ def cleanup_abandoned_projects():
         if old_projects:
             db.session.commit()
 
+@app.route('/admin_panel', methods=['GET', 'POST'])
+@admin_required
+def admin_panel():
+    """Admin panel with user management"""
+    if request.method == 'POST':
+        action = request.form.get('action')
+        username = request.form.get('username')
+        
+        user = User.query.filter_by(username=username).first()
+        if user and user.id != current_user.id:
+            if action == 'make_admin':
+                user.role = 'admin'
+                flash(f'{username} is now an admin!', 'success')
+            elif action == 'remove_admin':
+                user.role = 'user'
+                flash(f'{username} admin privileges removed.', 'info')
+            elif action == 'delete_user':
+                db.session.delete(user)
+                flash(f'User {username} deleted.', 'warning')
+            
+            db.session.commit()
+            return redirect(url_for('admin_panel'))
+    
+    # Get all users with project counts
+    all_users = User.query.all()
+    users = []
+    
+    for u in all_users:
+        # Get actual project counts
+        total_projects = u.projects.count() if hasattr(u, 'projects') else 0
+        active_projects = u.projects.filter_by(is_complete=False).count() if hasattr(u, 'projects') else 0
+        
+        users.append({
+            'id': u.id,
+            'username': u.username,
+            'email': u.email,
+            'role': u.role,
+            'status': getattr(u, 'status', 'active'),
+            'project_limit': getattr(u, 'project_limit', 5),
+            'created_at': u.created_at.isoformat() if u.created_at else None,
+            'last_login': u.last_login.isoformat() if u.last_login else None,
+            'total_projects': total_projects,
+            'active_projects': active_projects,
+            'can_delete': u.id != current_user.id  # Can't delete yourself
+        })
+    
+    # Calculate statistics
+    total_users = len(users)
+    admin_users = len([u for u in users if u['role'] == 'admin'])
+    total_projects = sum(u['total_projects'] for u in users)
+    active_projects_total = sum(u['active_projects'] for u in users)
+    
+    stats = {
+        'total_users': total_users,
+        'admin_users': admin_users,
+        'regular_users': total_users - admin_users,
+        'total_projects': total_projects,
+        'active_projects': active_projects_total
+    }
+    
+    pending_users = []  # No pending users for now
+    
+    return render_template('admin_panel.html', 
+                         users=users, 
+                         pending_users=pending_users,
+                         stats=stats)
+
+# Add this dummy register route right after admin_panel
+@app.route('/register')
+def register():
+    """Dummy register route"""
+    flash('Registration is not available. Please contact admin.', 'info')
+    return redirect(url_for('login'))
+
+@app.route('/user_dashboard')
+@login_required
+def user_dashboard():
+    """Enhanced user dashboard with detailed statistics"""
+    from services.project_manager import ProjectManager
+    
+    # Get project statistics
+    stats = ProjectManager.get_user_project_stats(current_user)
+    
+    # Get user's projects
+    projects = current_user.projects.order_by(Project.created_at.desc()).limit(10).all()
+    
+    # Calculate detailed statistics
+    total_area_optimized = 0
+    total_apartments = 0
+    total_rooms = 0
+    waste_reductions = []
+    design_waste_percentages = []
+    optimized_waste_percentages = []
+    
+    for project in projects:
+        if project.total_area:
+            total_area_optimized += project.total_area
+        if project.num_apartments:
+            total_apartments += project.num_apartments
+        if project.num_rooms:
+            total_rooms += project.num_rooms
+        
+        # Calculate waste reduction
+        if project.design_waste_percent and project.optimized_waste_percent:
+            design_waste_percentages.append(project.design_waste_percent)
+            optimized_waste_percentages.append(project.optimized_waste_percent)
+            reduction = project.design_waste_percent - project.optimized_waste_percent
+            waste_reductions.append(reduction)
+    
+    # Calculate averages
+    avg_design_waste = round(sum(design_waste_percentages) / len(design_waste_percentages), 2) if design_waste_percentages else 0
+    avg_optimized_waste = round(sum(optimized_waste_percentages) / len(optimized_waste_percentages), 2) if optimized_waste_percentages else 0
+    avg_waste_reduction = round(sum(waste_reductions) / len(waste_reductions), 2) if waste_reductions else 0
+    
+    # Calculate total tiles saved (estimate based on waste reduction)
+    tiles_saved_estimate = 0
+    if avg_waste_reduction > 0 and total_area_optimized > 0:
+        # Assuming 600x600mm tiles (0.36 m² per tile)
+        tile_area = 0.36
+        tiles_saved_estimate = int((total_area_optimized * avg_waste_reduction / 100) / tile_area)
+    
+    # Update stats dictionary
+    stats.update({
+        'total_area_optimized': round(total_area_optimized, 2),
+        'average_waste_reduction': avg_waste_reduction,
+        'projects_completed': len([p for p in projects if p.is_complete]),
+        'total_apartments': total_apartments,
+        'total_rooms': total_rooms,
+        'avg_design_waste': avg_design_waste,
+        'avg_optimized_waste': avg_optimized_waste,
+        'tiles_saved_estimate': tiles_saved_estimate
+    })
+    
+    # Get recent activity
+    recent_activity = ActivityLog.query.filter_by(user_id=current_user.id)\
+                                     .order_by(ActivityLog.created_at.desc())\
+                                     .limit(5).all()
+    
+    return render_template('user_dashboard.html', 
+                         projects=projects,
+                         stats=stats,
+                         recent_activity=recent_activity)
+
+@app.route('/delete_project/<int:project_id>', methods=['POST'])
+@login_required
+def delete_project(project_id):
+    """Delete a project with archiving"""
+    from services.project_manager import ProjectManager
+    
+    project = Project.query.get_or_404(project_id)
+    
+    # Check ownership
+    if project.user_id != current_user.id and current_user.role != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    # Archive and delete
+    if ProjectManager.delete_project(project_id, archive=True):
+        flash('Project deleted successfully. Your data has been anonymized and saved for improvement purposes.', 'success')
+        return jsonify({'success': True, 'redirect': url_for('user_dashboard')})
+    else:
+        return jsonify({'error': 'Failed to delete project'}), 500
+
+@app.route('/check_project_limit')
+@login_required
+def check_project_limit():
+    """Check if user can create new project"""
+    from services.project_manager import ProjectManager
+    
+    can_create = ProjectManager.can_create_project(current_user)
+    stats = ProjectManager.get_user_project_stats(current_user)
+    
+    return jsonify({
+        'can_create': can_create,
+        'active_projects': stats['active_projects'],
+        'project_limit': stats['project_limit'],
+        'remaining_slots': stats['remaining_slots']
+    })
+
 @app.route('/step1', methods=['GET', 'POST'])
 @login_required
 def step1():
+    from services.project_manager import ProjectManager
+    
+    # Check project limit
+    if not ProjectManager.can_create_project(current_user):
+        stats = ProjectManager.get_user_project_stats(current_user)
+        flash(f'You have reached your project limit ({stats["project_limit"]} projects). Please delete an existing project to create a new one.', 'warning')
+        return redirect(url_for('user_dashboard'))
+
     """Step 1: Load DXF, Extract Rooms, Start Points, and Tile Sizes"""
     if request.method == 'POST':
         # Clear only project data, preserve login

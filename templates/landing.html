@@ -32,9 +32,17 @@
             </div>
         </div>
         <div class="user-actions">
+            <a href="{{ url_for('user_dashboard') }}" class="btn btn-outline-light btn-sm">
+                <i class="bi bi-speedometer2"></i> Dashboard
+            </a>
             <a href="{{ url_for('change_password') }}" class="btn btn-outline-light btn-sm">
                 <i class="bi bi-gear"></i> Settings
             </a>
+            {% if current_user.role == 'admin' %}
+            <a href="{{ url_for('admin_panel') }}" class="btn btn-outline-warning btn-sm">
+                <i class="bi bi-shield-lock"></i> Admin
+            </a>
+            {% endif %}
             <a href="{{ url_for('logout') }}" class="btn btn-outline-light btn-sm">
                 <i class="bi bi-box-arrow-right"></i> Logout
             </a>
@@ -68,6 +76,12 @@
             </div>
             {% endif %}
 
+            <div class="text-center mt-4">
+                <a href="{{ url_for('user_dashboard') }}" class="btn btn-primary btn-lg">
+                    <i class="bi bi-speedometer2"></i> Go to Dashboard
+                </a>
+            </div>
+            
             <!-- Hero Section -->
             <div class="hero-section">
                 <div class="hero-content">

@@ -63,13 +63,6 @@
         font-size: 0.8rem;
         border-radius: 8px;
     }
-    
-    .pending-alert {
-        border: none;
-        border-radius: 12px;
-        background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
-        color: #8b4513;
-    }
 </style>
 {% endblock %}
 
@@ -95,95 +88,42 @@
     {% endwith %}
 
     <!-- Statistics Cards -->
+    {% if stats %}
     <div class="row mb-4">
         <div class="col-md-3 mb-3">
             <div class="stats-card text-center">
                 <div class="stats-icon text-primary">
                     <i class="bi bi-people-fill"></i>
                 </div>
-                <div class="stats-number text-primary">{{ users|length }}</div>
+                <div class="stats-number text-primary">{{ stats.total_users }}</div>
                 <div class="text-muted">Total Users</div>
             </div>
         </div>
         <div class="col-md-3 mb-3">
             <div class="stats-card text-center">
-                <div class="stats-icon text-success">
-                    <i class="bi bi-person-check-fill"></i>
+                <div class="stats-icon text-danger">
+                    <i class="bi bi-shield-fill"></i>
                 </div>
-                <div class="stats-number text-success">{{ users|selectattr('status', 'equalto', 'active')|list|length }}</div>
-                <div class="text-muted">Active Users</div>
-            </div>
-        </div>
-        <div class="col-md-3 mb-3">
-            <div class="stats-card text-center">
-                <div class="stats-icon text-warning">
-                    <i class="bi bi-clock-fill"></i>
-                </div>
-                <div class="stats-number text-warning">{{ pending_users|length }}</div>
-                <div class="text-muted">Pending Approval</div>
+                <div class="stats-number text-danger">{{ stats.admin_users }}</div>
+                <div class="text-muted">Admin Users</div>
             </div>
         </div>
         <div class="col-md-3 mb-3">
             <div class="stats-card text-center">
                 <div class="stats-icon text-info">
-                    <i class="bi bi-shield-fill"></i>
+                    <i class="bi bi-folder-fill"></i>
                 </div>
-                <div class="stats-number text-info">{{ users|selectattr('role', 'equalto', 'admin')|list|length }}</div>
-                <div class="text-muted">Administrators</div>
+                <div class="stats-number text-info">{{ stats.total_projects }}</div>
+                <div class="text-muted">Total Projects</div>
             </div>
         </div>
-    </div>
-
-    <!-- Pending Registrations -->
-    {% if pending_users %}
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="alert pending-alert">
-                <h5><i class="bi bi-exclamation-triangle-fill me-2"></i>Pending User Registrations</h5>
-                <p class="mb-0">{{ pending_users|length }} user{{ 's' if pending_users|length != 1 else '' }} waiting for approval.</p>
-            </div>
-            
-            <div class="table-container">
-                <table class="table table-hover mb-0">
-                    <thead>
-                        <tr>
-                            <th>Username</th>
-                            <th>Email</th>
-                            <th>Requested Role</th>
-                            <th>Registration Date</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for user in pending_users %}
-                        <tr>
-                            <td>
-                                <strong>{{ user.username }}</strong>
-                            </td>
-                            <td>{{ user.email }}</td>
-                            <td>
-                                <span class="badge bg-secondary">{{ user.role|title }}</span>
-                            </td>
-                            <td>{{ user.created_at[:19]|replace('T', ' ') if user.created_at else 'N/A' }}</td>
-                            <td>
-                                <form method="POST" style="display: inline;">
-                                    <input type="hidden" name="username" value="{{ user.username }}">
-                                    <button type="submit" name="action" value="approve" 
-                                            class="btn btn-success btn-action me-1"
-                                            onclick="return confirm('Approve user {{ user.username }}?')">
-                                        <i class="bi bi-check-lg"></i> Approve
-                                    </button>
-                                    <button type="submit" name="action" value="reject" 
-                                            class="btn btn-danger btn-action"
-                                            onclick="return confirm('Reject user {{ user.username }}? This will permanently delete their registration.')">
-                                        <i class="bi bi-x-lg"></i> Reject
-                                    </button>
-                                </form>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+        <div class="col-md-3 mb-3">
+            <div class="stats-card text-center">
+                <div class="stats-icon text-success">
+                    <i class="bi bi-hourglass-split"></i>
+                </div>
+                <div class="stats-number text-success">{{ stats.active_projects }}</div>
+                <div class="text-muted">Active Projects</div>
             </div>
         </div>
     </div>
@@ -203,6 +143,7 @@
                             <th>Email</th>
                             <th>Role</th>
                             <th>Status</th>
+                            <th>Projects</th>
                             <th>Last Login</th>
                             <th>Actions</th>
                         </tr>
@@ -212,7 +153,7 @@
                         <tr>
                             <td>
                                 <strong>{{ user.username }}</strong>
-                                {% if user.username == session.username %}
+                                {% if user.username == current_user.username %}
                                     <span class="badge bg-info ms-1">You</span>
                                 {% endif %}
                             </td>
@@ -220,45 +161,47 @@
                             <td>
                                 {% if user.role == 'admin' %}
                                     <span class="badge bg-danger">Admin</span>
-                                {% elif user.role == 'user' %}
+                                {% else %}
                                     <span class="badge bg-primary">User</span>
-                                {% elif user.role == 'guest' %}
-                                    <span class="badge bg-secondary">Guest</span>
                                 {% endif %}
                             </td>
                             <td>
-                                {% if user.status == 'active' %}
-                                    <span class="badge bg-success">Active</span>
-                                {% elif user.status == 'pending' %}
-                                    <span class="badge bg-warning">Pending</span>
-                                {% elif user.status == 'suspended' %}
-                                    <span class="badge bg-danger">Suspended</span>
-                                {% endif %}
+                                <span class="badge bg-success">{{ user.status }}</span>
+                            </td>
+                            <td>
+                                <span class="text-muted">{{ user.active_projects }}/{{ user.project_limit }}</span>
+                                <small class="d-block text-muted">Total: {{ user.total_projects }}</small>
                             </td>
                             <td>
                                 {% if user.last_login %}
-                                    {{ user.last_login[:19]|replace('T', ' ') }}
+                                    <small>{{ user.last_login }}</small>
                                 {% else %}
-                                    <span class="text-muted">Never</span>
+                                    <small class="text-muted">Never</small>
                                 {% endif %}
                             </td>
                             <td>
-                                {% if user.username != session.username %}
+                                {% if user.can_delete %}
                                 <form method="POST" style="display: inline;">
-                                    <input type="hidden" name="username" value="{{ user.username }}">
-                                    {% if user.status == 'active' %}
-                                        <button type="submit" name="action" value="suspend" 
-                                                class="btn btn-warning btn-action me-1"
-                                                onclick="return confirm('Suspend user {{ user.username }}?')">
-                                            <i class="bi bi-pause-circle"></i> Suspend
-                                        </button>
-                                    {% elif user.status == 'suspended' %}
-                                        <button type="submit" name="action" value="activate" 
+                                    {% if user.role != 'admin' %}
+                                        <input type="hidden" name="username" value="{{ user.username }}">
+                                        <button type="submit" name="action" value="make_admin" 
                                                 class="btn btn-success btn-action me-1"
-                                                onclick="return confirm('Activate user {{ user.username }}?')">
-                                            <i class="bi bi-play-circle"></i> Activate
+                                                onclick="return confirm('Make {{ user.username }} an admin?')">
+                                            <i class="bi bi-shield-plus"></i> Make Admin
+                                        </button>
+                                    {% else %}
+                                        <input type="hidden" name="username" value="{{ user.username }}">
+                                        <button type="submit" name="action" value="remove_admin" 
+                                                class="btn btn-warning btn-action me-1"
+                                                onclick="return confirm('Remove admin privileges from {{ user.username }}?')">
+                                            <i class="bi bi-shield-x"></i> Remove Admin
                                         </button>
                                     {% endif %}
+                                    <button type="submit" name="action" value="delete_user" 
+                                            class="btn btn-danger btn-action"
+                                            onclick="return confirm('Delete user {{ user.username }}? This will also delete all their projects!')">
+                                        <i class="bi bi-trash"></i> Delete
+                                    </button>
                                 </form>
                                 {% else %}
                                     <span class="text-muted">Current User</span>
@@ -287,12 +230,12 @@
                             </a>
                         </div>
                         <div class="col-md-4 mb-2">
-                            <a href="{{ url_for('register') }}" class="btn btn-info w-100">
-                                <i class="bi bi-person-plus me-2"></i>Registration Page
+                            <a href="{{ url_for('user_dashboard') }}" class="btn btn-secondary w-100">
+                                <i class="bi bi-speedometer2 me-2"></i>User Dashboard
                             </a>
                         </div>
                         <div class="col-md-4 mb-2">
-                            <button class="btn btn-secondary w-100" onclick="location.reload()">
+                            <button class="btn btn-outline-secondary w-100" onclick="location.reload()">
                                 <i class="bi bi-arrow-clockwise me-2"></i>Refresh Data
                             </button>
                         </div>

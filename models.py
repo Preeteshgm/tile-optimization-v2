@@ -217,3 +217,41 @@ class InventoryPiece(db.Model):
     is_matched = db.Column(db.Boolean, default=False)
     match_id = db.Column(db.String(50))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class ProjectArchive(db.Model):
+    """Store deleted projects for AI training"""
+    __tablename__ = 'project_archives'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    original_project_id = db.Column(db.Integer)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'))
+    project_name = db.Column(db.String(255))
+    archived_at = db.Column(db.DateTime, default=datetime.utcnow)
+    data_json = db.Column(db.Text)
+    file_size_mb = db.Column(db.Float)
+    anonymized = db.Column(db.Boolean, default=False)
+    used_for_training = db.Column(db.Boolean, default=False)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'project_name': self.project_name,
+            'archived_at': self.archived_at.isoformat() if self.archived_at else None,
+            'file_size_mb': self.file_size_mb,
+            'used_for_training': self.used_for_training
+        }
+
+class UserDashboard(db.Model):
+    """Cached dashboard metrics for users"""
+    __tablename__ = 'user_dashboards'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'))
+    total_area_optimized = db.Column(db.Float, default=0)
+    average_waste_reduction = db.Column(db.Float, default=0)
+    total_tiles_saved = db.Column(db.Integer, default=0)
+    projects_completed = db.Column(db.Integer, default=0)
+    last_updated = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationship
+    user = db.relationship('User', backref=db.backref('dashboard', uselist=False))
