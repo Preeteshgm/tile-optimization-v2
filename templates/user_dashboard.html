@@ -711,13 +711,26 @@
                 button.disabled = true;
                 button.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Deleting...';
                 
+                // FIXED: Remove Content-Type header and use FormData instead
                 fetch(`/delete_project/${projectId}`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
+                    // Don't set Content-Type header - let browser set it automatically
+                    credentials: 'same-origin' // Include cookies/session
+                })
+                .then(response => {
+                    // Check if response is ok
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    // Check if response is JSON
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        return response.json();
+                    } else {
+                        // If not JSON, it might be a redirect or error page
+                        throw new Error('Server returned non-JSON response');
                     }
                 })
-                .then(response => response.json())
                 .then(data => {
                     if (data.success) {
                         // Show success message

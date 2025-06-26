@@ -611,47 +611,36 @@ def user_dashboard():
 @app.route('/delete_project/<int:project_id>', methods=['POST'])
 @login_required
 def delete_project(project_id):
-    """Delete a project with archiving - Fixed to handle both AJAX and form submissions"""
-    from services.project_manager import ProjectManager
-    
-    project = Project.query.get_or_404(project_id)
-    
-    # Check ownership
-    if project.user_id != current_user.id and current_user.role != 'admin':
-        if request.headers.get('Content-Type') == 'application/json':
-            return jsonify({'error': 'Unauthorized'}), 403
-        else:
-            flash('Unauthorized access to project', 'error')
-            return redirect(url_for('user_dashboard'))
-    
-    project_name = project.project_name
-    
-    # Archive and delete
+    """Delete a project with archiving - Fixed to handle AJAX properly"""
     try:
+        from services.project_manager import ProjectManager
+        
+        project = Project.query.get_or_404(project_id)
+        
+        # Check ownership
+        if project.user_id != current_user.id and current_user.role != 'admin':
+            # For AJAX requests, return JSON error
+            return jsonify({'error': 'Unauthorized access to project'}), 403
+        
+        project_name = project.project_name
+        
+        # Archive and delete
         if ProjectManager.delete_project(project_id, archive=True):
             success_message = f'Project "{project_name}" deleted successfully. Your data has been anonymized and saved for improvement purposes.'
             
-            # Check if this is an AJAX request
-            if request.headers.get('Content-Type') == 'application/json' or request.is_json:
-                return jsonify({'success': True, 'message': success_message, 'redirect': url_for('user_dashboard')})
-            else:
-                # Regular form submission
-                flash(success_message, 'success')
-                return redirect(url_for('user_dashboard'))
+            # Always return JSON for AJAX requests
+            return jsonify({
+                'success': True, 
+                'message': success_message,
+                'redirect': url_for('user_dashboard')
+            })
         else:
-            error_message = 'Failed to delete project'
-            if request.headers.get('Content-Type') == 'application/json' or request.is_json:
-                return jsonify({'error': error_message}), 500
-            else:
-                flash(error_message, 'error')
-                return redirect(url_for('user_dashboard'))
+            return jsonify({'error': 'Failed to delete project'}), 500
+            
     except Exception as e:
-        error_message = f'Error deleting project: {str(e)}'
-        if request.headers.get('Content-Type') == 'application/json' or request.is_json:
-            return jsonify({'error': error_message}), 500
-        else:
-            flash(error_message, 'error')
-            return redirect(url_for('user_dashboard'))
+        # Log the error for debugging
+        app.logger.error(f'Error deleting project {project_id}: {str(e)}')
+        return jsonify({'error': f'Error deleting project: {str(e)}'}), 500
 
 @app.route('/check_project_limit')
 @login_required
