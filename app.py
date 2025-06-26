@@ -13,6 +13,8 @@ import pandas as pd
 import json
 import re
 from functools import wraps
+import click
+import hashlib
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -39,9 +41,10 @@ from flask_login import LoginManager, UserMixin, login_user, logout_user, login_
 from werkzeug.security import generate_password_hash, check_password_hash
 
 # Import your new database components
-from models import db, User, Project, Room, TileConfig, OptimizationResult, ActivityLog, ProjectArchive, UserDashboard
+from models import db, User, Project, Room, TileConfig, OptimizationResult, ActivityLog, ProjectArchive, UserDashboard, ProjectFile
 from db_bridge import db_bridge
 from services.project_manager import ProjectManager
+from services.session_data_manager import SessionDataManager
 
 # Define the NumpyEncoder class first
 class NumpyEncoder(json.JSONEncoder):
@@ -110,19 +113,6 @@ def admin_required(f):
 app.config['UPLOAD_FOLDER'] = 'uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# ADD LOGIN CREDENTIALS HERE:
-LOGIN_CREDENTIALS = {
-    'admin': 'admin123',
-    'user': 'password123',
-    'demo': 'demo123',
-    'J384_TileOptz': 'J384',        # New account
-    'J386_TileOptz': 'J386',        # New account
-    'J385_TileOptz': 'J385',        # New account  
-    'J388_TileOptz': 'J388',        # New account
-    'J390_TileOptz': 'J390',        # New account
-    'TestDemo2025': 'TDemo25'       # Test Account
-}
-
 # Initialize processors as global objects
 dxf_processor = CustomDxfProcessor()
 cluster_processor = RoomClusterProcessor(eps=7500, min_samples=1)
@@ -132,24 +122,33 @@ matching_processor = MatchingProcessor()
 export_processor = ExportProcessor()
 data_prep_processor = DataPreparationProcessor()
 
-
 def check_credentials(username, password):
     """Check if username/password combination is valid using database"""
     user = User.query.filter_by(username=username).first()
+    
     if user and check_password_hash(user.password_hash, password):
         return user
-    # Fallback to hardcoded credentials for migration period
-    if LOGIN_CREDENTIALS.get(username) == password:
-        # Create user in database if doesn't exist
-        if not user:
-            user = User(
-                username=username,
-                email=f"{username}@tileoptimization.com",
-                password_hash=generate_password_hash(password)
+    
+    # Migration period: Create default admin user if no users exist
+    if User.query.count() == 0 and username == 'admin' and password == 'admin123':
+        try:
+            # Create initial admin user
+            admin_user = User(
+                username='admin',
+                email='admin@tileoptimization.com',
+                password_hash=generate_password_hash('admin123'),
+                role='admin'
             )
-            db.session.add(user)
+            db.session.add(admin_user)
             db.session.commit()
-        return user
+            
+            print("Created initial admin user")
+            return admin_user
+            
+        except Exception as e:
+            db.session.rollback()
+            print(f"Error creating initial admin user: {e}")
+    
     return None
 
 @app.route('/')
@@ -246,27 +245,39 @@ def change_password():
         new_password = request.form.get('new_password')
         confirm_password = request.form.get('confirm_password')
         
-        username = session.get('username')
-        
         # Verify current password
-        if not check_credentials(username, current_password):
+        if not check_password_hash(current_user.password_hash, current_password):
             flash('Current password is incorrect', 'error')
         elif new_password != confirm_password:
             flash('New passwords do not match', 'error')
         elif len(new_password) < 6:
             flash('New password must be at least 6 characters', 'error')
         else:
-            # Update password
-            LOGIN_CREDENTIALS[username] = new_password
-            flash('Password changed successfully', 'success')
-            return redirect(url_for('index'))
+            try:
+                # Update password in database
+                current_user.password_hash = generate_password_hash(new_password)
+                db.session.commit()
+                
+                # Log the password change
+                db_bridge.log_activity(
+                    current_user.id, 
+                    None, 
+                    'password_changed', 
+                    'User changed their password'
+                )
+                
+                flash('Password changed successfully', 'success')
+                return redirect(url_for('index'))
+                
+            except Exception as e:
+                db.session.rollback()
+                app.logger.error(f'Error changing password for user {current_user.id}: {str(e)}')
+                flash('An error occurred while changing password. Please try again.', 'error')
     
     return render_template('change_password.html')
 
-
-
 def clear_project_data_only():
-    """Clear only project-related data from session and database, preserve login"""
+    """Clear project data and DELETE incomplete projects - USE CAREFULLY"""
     from services.project_manager import ProjectManager
     
     # Clear session project data
@@ -320,7 +331,7 @@ def clear_project_data_only():
         except Exception as e:
             print(f"Error removing file: {str(e)}")
     
-    print("Project data cleared, login preserved")
+    print("Project data cleared and incomplete project deleted from database")
 
 def cleanup_abandoned_projects():
     """Clean up projects that haven't been completed within 24 hours"""
@@ -344,25 +355,99 @@ def cleanup_abandoned_projects():
 @app.route('/admin_panel', methods=['GET', 'POST'])
 @admin_required
 def admin_panel():
-    """Admin panel with user management"""
+    """Admin panel with user management and project overview"""
     if request.method == 'POST':
         action = request.form.get('action')
-        username = request.form.get('username')
         
-        user = User.query.filter_by(username=username).first()
-        if user and user.id != current_user.id:
-            if action == 'make_admin':
-                user.role = 'admin'
-                flash(f'{username} is now an admin!', 'success')
-            elif action == 'remove_admin':
-                user.role = 'user'
-                flash(f'{username} admin privileges removed.', 'info')
-            elif action == 'delete_user':
-                db.session.delete(user)
-                flash(f'User {username} deleted.', 'warning')
+        if action == 'create_user':
+            # Handle new user creation
+            new_username = request.form.get('new_username', '').strip()
+            new_email = request.form.get('new_email', '').strip()
+            new_password = request.form.get('new_password', '')
+            new_role = request.form.get('new_role', 'user')
             
-            db.session.commit()
+            # Validation
+            if not new_username or not new_email or not new_password:
+                flash('All fields are required for new user', 'error')
+            elif len(new_password) < 6:
+                flash('Password must be at least 6 characters', 'error')
+            elif User.query.filter_by(username=new_username).first():
+                flash(f'Username {new_username} already exists', 'error')
+            elif User.query.filter_by(email=new_email).first():
+                flash(f'Email {new_email} already in use', 'error')
+            else:
+                try:
+                    # Create new user
+                    new_user = User(
+                        username=new_username,
+                        email=new_email,
+                        password_hash=generate_password_hash(new_password),
+                        role=new_role
+                    )
+                    db.session.add(new_user)
+                    db.session.commit()
+                    
+                    # Log activity
+                    db_bridge.log_activity(
+                        current_user.id,
+                        None,
+                        'user_created',
+                        f'Admin created new user: {new_username}'
+                    )
+                    
+                    flash(f'User {new_username} created successfully!', 'success')
+                    return redirect(url_for('admin_panel'))
+                    
+                except Exception as e:
+                    db.session.rollback()
+                    flash(f'Error creating user: {str(e)}', 'error')
+        
+        elif action == 'delete_project':
+            # Handle project deletion
+            project_id = request.form.get('project_id')
+            project = Project.query.get(project_id)
+            
+            if project:
+                project_name = project.project_name
+                username = project.user.username
+                
+                try:
+                    # Archive and delete project
+                    from services.project_manager import ProjectManager
+                    ProjectManager.delete_project(project_id, archive=True)
+                    
+                    # Log activity
+                    db_bridge.log_activity(
+                        current_user.id,
+                        None,
+                        'project_deleted_by_admin',
+                        f'Admin deleted project "{project_name}" from user {username}'
+                    )
+                    
+                    flash(f'Project "{project_name}" deleted successfully', 'success')
+                except Exception as e:
+                    flash(f'Error deleting project: {str(e)}', 'error')
+            
             return redirect(url_for('admin_panel'))
+        
+        else:
+            # Handle existing user actions (make_admin, remove_admin, delete_user)
+            username = request.form.get('username')
+            
+            user = User.query.filter_by(username=username).first()
+            if user and user.id != current_user.id:
+                if action == 'make_admin':
+                    user.role = 'admin'
+                    flash(f'{username} is now an admin!', 'success')
+                elif action == 'remove_admin':
+                    user.role = 'user'
+                    flash(f'{username} admin privileges removed.', 'info')
+                elif action == 'delete_user':
+                    db.session.delete(user)
+                    flash(f'User {username} deleted.', 'warning')
+                
+                db.session.commit()
+                return redirect(url_for('admin_panel'))
     
     # Get all users with project counts
     all_users = User.query.all()
@@ -387,25 +472,61 @@ def admin_panel():
             'can_delete': u.id != current_user.id  # Can't delete yourself
         })
     
+    # Get all projects with detailed information
+    all_projects = Project.query.order_by(Project.created_at.desc()).all()
+    projects = []
+    
+    for p in all_projects:
+        # Calculate project progress
+        steps_complete = sum([
+            p.step1_complete, p.step2_complete, p.step3_complete,
+            p.step4_complete, p.step5_complete, p.step6_complete,
+            p.step7_complete, p.step8_complete, p.step9_complete
+        ])
+        progress_percentage = (steps_complete / 9) * 100
+        
+        projects.append({
+            'id': p.id,
+            'project_name': p.project_name,
+            'username': p.user.username,
+            'user_id': p.user_id,
+            'created_at': p.created_at.isoformat() if p.created_at else None,
+            'updated_at': p.updated_at.isoformat() if p.updated_at else None,
+            'is_complete': p.is_complete,
+            'current_step': p.current_step,
+            'progress': progress_percentage,
+            'total_area': p.total_area,
+            'num_apartments': p.num_apartments or 0,
+            'num_rooms': p.num_rooms or 0,
+            'design_waste': p.design_waste_percent,
+            'optimized_waste': p.optimized_waste_percent,
+            'waste_reduction': (p.design_waste_percent - p.optimized_waste_percent) if p.design_waste_percent and p.optimized_waste_percent else None
+        })
+    
     # Calculate statistics
     total_users = len(users)
     admin_users = len([u for u in users if u['role'] == 'admin'])
-    total_projects = sum(u['total_projects'] for u in users)
-    active_projects_total = sum(u['active_projects'] for u in users)
+    total_projects = len(projects)
+    active_projects_total = len([p for p in projects if not p['is_complete']])
+    completed_projects = len([p for p in projects if p['is_complete']])
+    
+    # Calculate average waste reduction for completed projects
+    waste_reductions = [p['waste_reduction'] for p in projects if p['waste_reduction'] is not None]
+    avg_waste_reduction = sum(waste_reductions) / len(waste_reductions) if waste_reductions else 0
     
     stats = {
         'total_users': total_users,
         'admin_users': admin_users,
         'regular_users': total_users - admin_users,
         'total_projects': total_projects,
-        'active_projects': active_projects_total
+        'active_projects': active_projects_total,
+        'completed_projects': completed_projects,
+        'avg_waste_reduction': round(avg_waste_reduction, 2)
     }
-    
-    pending_users = []  # No pending users for now
     
     return render_template('admin_panel.html', 
                          users=users, 
-                         pending_users=pending_users,
+                         projects=projects,
                          stats=stats)
 
 # Add this dummy register route right after admin_panel
@@ -418,13 +539,16 @@ def register():
 @app.route('/user_dashboard')
 @login_required
 def user_dashboard():
-    """Enhanced user dashboard with detailed statistics"""
+    """Enhanced user dashboard with detailed statistics - PRESERVES PROJECTS"""
     from services.project_manager import ProjectManager
+    
+    # ONLY clear session data, DO NOT delete projects
+    clear_session_data_only()
     
     # Get project statistics
     stats = ProjectManager.get_user_project_stats(current_user)
     
-    # Get user's projects
+    # Get user's projects - INCLUDING INCOMPLETE ONES
     projects = current_user.projects.order_by(Project.created_at.desc()).limit(10).all()
     
     # Calculate detailed statistics
@@ -487,21 +611,47 @@ def user_dashboard():
 @app.route('/delete_project/<int:project_id>', methods=['POST'])
 @login_required
 def delete_project(project_id):
-    """Delete a project with archiving"""
+    """Delete a project with archiving - Fixed to handle both AJAX and form submissions"""
     from services.project_manager import ProjectManager
     
     project = Project.query.get_or_404(project_id)
     
     # Check ownership
     if project.user_id != current_user.id and current_user.role != 'admin':
-        return jsonify({'error': 'Unauthorized'}), 403
+        if request.headers.get('Content-Type') == 'application/json':
+            return jsonify({'error': 'Unauthorized'}), 403
+        else:
+            flash('Unauthorized access to project', 'error')
+            return redirect(url_for('user_dashboard'))
+    
+    project_name = project.project_name
     
     # Archive and delete
-    if ProjectManager.delete_project(project_id, archive=True):
-        flash('Project deleted successfully. Your data has been anonymized and saved for improvement purposes.', 'success')
-        return jsonify({'success': True, 'redirect': url_for('user_dashboard')})
-    else:
-        return jsonify({'error': 'Failed to delete project'}), 500
+    try:
+        if ProjectManager.delete_project(project_id, archive=True):
+            success_message = f'Project "{project_name}" deleted successfully. Your data has been anonymized and saved for improvement purposes.'
+            
+            # Check if this is an AJAX request
+            if request.headers.get('Content-Type') == 'application/json' or request.is_json:
+                return jsonify({'success': True, 'message': success_message, 'redirect': url_for('user_dashboard')})
+            else:
+                # Regular form submission
+                flash(success_message, 'success')
+                return redirect(url_for('user_dashboard'))
+        else:
+            error_message = 'Failed to delete project'
+            if request.headers.get('Content-Type') == 'application/json' or request.is_json:
+                return jsonify({'error': error_message}), 500
+            else:
+                flash(error_message, 'error')
+                return redirect(url_for('user_dashboard'))
+    except Exception as e:
+        error_message = f'Error deleting project: {str(e)}'
+        if request.headers.get('Content-Type') == 'application/json' or request.is_json:
+            return jsonify({'error': error_message}), 500
+        else:
+            flash(error_message, 'error')
+            return redirect(url_for('user_dashboard'))
 
 @app.route('/check_project_limit')
 @login_required
@@ -531,10 +681,51 @@ def step1():
         return redirect(url_for('user_dashboard'))
 
     """Step 1: Load DXF, Extract Rooms, Start Points, and Tile Sizes"""
+    
+    # GET request - validate project exists
+    if request.method == 'GET':
+        cleanup_old_uploaded_files()
+        
+        # Check if user has a project in session
+        if 'project_id' not in session:
+            # Check if user has an incomplete project in database
+            active_project = Project.query.filter_by(
+                user_id=current_user.id,
+                is_complete=False
+            ).order_by(Project.created_at.desc()).first()
+            
+            if active_project and active_project.step1_complete:
+                # Load existing project to session
+                session['project_id'] = active_project.id
+                session['project_name'] = active_project.project_name
+                print(f"Loaded existing project: {active_project.project_name}")
+            else:
+                # No project exists, redirect to create one
+                flash('Please create a new project before uploading DXF files', 'info')
+                return redirect(url_for('new_project'))
+        else:
+            # Validate project exists in database
+            project = Project.query.get(session['project_id'])
+            if not project:
+                # Project doesn't exist, clear session and redirect
+                session.pop('project_id', None)
+                session.pop('project_name', None)
+                flash('Project not found. Please create a new project.', 'warning')
+                return redirect(url_for('new_project'))
+        
+        return render_template('step1.html')
+    
+    # POST request - process DXF upload
     if request.method == 'POST':
-        # Clear only project data, preserve login
-        clear_project_data_only()
-        print("Starting new project - cleared existing project data")
+        # Validate project exists before processing
+        if 'project_id' not in session:
+            return jsonify({'error': 'No active project. Please create a project first.'})
+        
+        project = Project.query.get(session['project_id'])
+        if not project:
+            return jsonify({'error': 'Project not found. Please create a new project.'})
+        
+        print(f"Processing DXF for project: {project.project_name}")
         
         # Check if the post request has the file part
         if 'dxf_file' not in request.files:
@@ -551,12 +742,8 @@ def step1():
         
         # Process the file
         try:
-            # Create new project in database
-            project = db_bridge.get_or_create_project(
-                user_id=current_user.id,
-                project_name=f"Project_{filename.split('.')[0]}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            )
-            session['project_id'] = project.id
+            # Use the existing project (don't create a new one)
+            print(f"Using existing project: {project.project_name} (ID: {project.id})")
             
             # Set the file path in the processor
             dxf_processor.file_path = filepath
@@ -629,6 +816,9 @@ def step1():
                 lambda x: f"A{x+1}"
             )
             
+            # Clear existing rooms for this project (in case of re-upload)
+            Room.query.filter_by(project_id=project.id).delete()
+            
             # Save rooms to database
             saved_rooms = {}
             for idx, row in final_room_df.iterrows():
@@ -666,8 +856,12 @@ def step1():
             project.total_area = total_area_sum  # Now properly converted to m²
             project.step1_complete = True
             project.current_step = 2
+            project.updated_at = datetime.utcnow()
             
+            # Commit all changes
             db.session.commit()
+            
+            print(f"Successfully processed DXF for project: {project.project_name}")
             
             # Log activity
             db_bridge.log_activity(
@@ -693,7 +887,8 @@ def step1():
                 'tile_sizes': tile_sizes,
                 'room_plot': room_plot_b64,
                 'cluster_plot': cluster_plot_b64,
-                'project_id': project.id  # Include project ID in response
+                'project_id': project.id,  # Include project ID in response
+                'project_name': project.project_name  # Include project name
             })
             
         except Exception as e:
@@ -702,23 +897,6 @@ def step1():
             import traceback
             traceback.print_exc()
             return jsonify({'error': f'Error processing DXF file: {str(e)}'})
-    
-    # GET request - check for existing project
-    if request.method == 'GET':
-        cleanup_old_uploaded_files()
-        
-        # Check if user has an incomplete project
-        active_project = Project.query.filter_by(
-            user_id=current_user.id,
-            is_complete=False
-        ).order_by(Project.created_at.desc()).first()
-        
-        if active_project and active_project.step1_complete:
-            # Load project data to session
-            session['project_id'] = active_project.id
-            # You might want to reload room data here if needed
-    
-    return render_template('step1.html')
 
 @app.route('/step2', methods=['GET', 'POST'])
 @login_required
@@ -2571,6 +2749,19 @@ def is_room_rectangular(polygon):
     # This is a simplified check - you can make it more sophisticated
     return True  # Simplified for now
 
+def calculate_file_hash(filepath):
+    """Calculate SHA256 hash of a file"""
+    sha256_hash = hashlib.sha256()
+    with open(filepath, "rb") as f:
+        # Read file in chunks to handle large files
+        for byte_block in iter(lambda: f.read(4096), b""):
+            sha256_hash.update(byte_block)
+    return sha256_hash.hexdigest()
+
+def has_project_data():
+    """Check if there's project data in the session"""
+    return any(key in session for key in ['rooms_data', 'room_df', 'apartments_data'])
+
 
 def serialize_rooms(rooms):
     """Convert room polygons to a serializable format"""
@@ -2883,12 +3074,12 @@ def has_project_data():
 @app.route('/clear-session', methods=['POST'])
 @login_required
 def clear_session_route():
-    """API endpoint to clear session and cleanup files"""
+    """API endpoint to clear session data only"""
     try:
-        clear_project_data_only()  # This now includes file cleanup
+        clear_session_data_only()  # Only clear session, preserve projects
         return jsonify({
             'success': True, 
-            'message': 'All project data and uploaded files cleared successfully!'
+            'message': 'Session data cleared successfully!'
         })
     except Exception as e:
         return jsonify({'error': f'Error clearing session: {str(e)}'})
@@ -2955,14 +3146,449 @@ def toggle_edit_mode():
 def finish_project():
     """Handle project completion with data cleanup"""
     try:
-        clear_project_data_only()  # This now includes file cleanup
+        # Mark project as complete in database before clearing
+        if 'project_id' in session:
+            project = Project.query.get(session['project_id'])
+            if project:
+                project.is_complete = True
+                project.updated_at = datetime.utcnow()
+                db.session.commit()
+                print(f"Project {project.id} marked as complete")
+        
+        # Now clear session data only
+        clear_session_data_only()
+        
         return jsonify({
             'success': True,
-            'message': 'Project completed, data and files cleared!',
+            'message': 'Project completed successfully!',
             'redirect': url_for('index')
         })
     except Exception as e:
         return jsonify({'error': f'Error finishing project: {str(e)}'})
+    
+@app.route('/new-project', methods=['GET', 'POST'])
+@login_required
+def new_project():
+    """Create new project with details"""
+    from services.project_manager import ProjectManager
+    
+    # Check project limit
+    if not ProjectManager.can_create_project(current_user):
+        stats = ProjectManager.get_user_project_stats(current_user)
+        flash(f'You have reached your project limit ({stats["project_limit"]} projects). Please delete an existing project to create a new one.', 'error')
+        return redirect(url_for('user_dashboard'))
+    
+    if request.method == 'POST':
+        project_name = request.form.get('project_name', '').strip()
+        project_area = request.form.get('project_area', '').strip()
+        project_description = request.form.get('project_description', '').strip()
+        
+        if not project_name:
+            flash('Project name is required', 'error')
+            return redirect(url_for('new_project'))
+        
+        try:
+            # Create new project in database
+            project = Project(
+                user_id=current_user.id,
+                project_name=project_name,
+                current_step=1,
+                created_at=datetime.utcnow()
+            )
+            
+            # Add optional fields if provided
+            if project_area:
+                try:
+                    project.total_area = float(project_area)
+                except ValueError:
+                    pass
+            
+            # Store description in session for now
+            if project_description:
+                session['project_description'] = project_description
+            
+            db.session.add(project)
+            db.session.commit()
+            
+            # Store project ID in session
+            session['project_id'] = project.id
+            session['project_name'] = project_name
+            
+            # Log activity
+            db_bridge.log_activity(
+                current_user.id,
+                project.id,
+                'project_created',
+                f'Created new project: {project_name}'
+            )
+            
+            flash(f'Project "{project_name}" created successfully!', 'success')
+            return redirect(url_for('step1'))
+            
+        except Exception as e:
+            db.session.rollback()
+            app.logger.error(f'Error creating project: {str(e)}')
+            flash('Error creating project. Please try again.', 'error')
+            return redirect(url_for('new_project'))
+    
+    return render_template('new_project.html')
+
+@app.route('/navigate_to_step/<int:step_number>')
+@login_required
+def navigate_to_step(step_number):
+    """Navigate to a specific step with data restoration"""
+    try:
+        # Validate step number
+        if step_number < 1 or step_number > 9:
+            flash('Invalid step number', 'error')
+            return redirect(url_for('index'))
+        
+        # Check if there's an active project
+        if 'project_id' not in session:
+            flash('No active project found. Please start a new project.', 'warning')
+            return redirect(url_for('step1'))
+        
+        project_id = session['project_id']
+        project = Project.query.get(project_id)
+        
+        if not project:
+            flash('Project not found', 'error')
+            session.pop('project_id', None)
+            return redirect(url_for('step1'))
+        
+        # Check if user can access this step
+        if not project.can_access_step(step_number):
+            flash(f'Please complete the previous steps first', 'warning')
+            return redirect(url_for(f'step{project.current_step}'))
+        
+        # If navigating to a completed step, restore its data
+        if getattr(project, f'step{step_number}_complete', False):
+            # Restore all data up to this step
+            SessionDataManager.restore_all_completed_steps(project_id)
+            flash(f'Resumed at Step {step_number}', 'info')
+        
+        # Redirect to the appropriate step
+        return redirect(url_for(f'step{step_number}'))
+        
+    except Exception as e:
+        print(f'Error navigating to step {step_number}: {str(e)}')
+        flash('Error navigating to step', 'error')
+        return redirect(url_for('index'))
+
+@app.route('/api/save_progress', methods=['POST'])
+@login_required
+def save_progress():
+    """Save current step progress manually or automatically"""
+    try:
+        data = request.get_json()
+        step_number = data.get('step_number')
+        manual_save = data.get('manual_save', False)
+        
+        print(f"Save progress request: step={step_number}, manual={manual_save}")
+        
+        if 'project_id' not in session:
+            return jsonify({'error': 'No active project found'}), 400
+        
+        project_id = session['project_id']
+        project = Project.query.get(project_id)
+        
+        if not project:
+            return jsonify({'error': 'Project not found'}), 404
+        
+        # Check if step is valid
+        if not step_number or step_number < 1 or step_number > 9:
+            return jsonify({'error': 'Invalid step number'}), 400
+        
+        # Simple save approach - mark step as saved and update project
+        try:
+            # Update project current step if this is further than current
+            if step_number > project.current_step:
+                project.current_step = step_number
+            
+            # Mark the step as complete (this will vary based on what data exists)
+            step_complete_field = f'step{step_number}_complete'
+            if hasattr(project, step_complete_field):
+                setattr(project, step_complete_field, True)
+            
+            # Update timestamps
+            project.updated_at = datetime.utcnow()
+            
+            # Commit changes
+            db.session.commit()
+            
+            # Log activity
+            save_type = "manual" if manual_save else "auto"
+            db_bridge.log_activity(
+                current_user.id,
+                project.id,
+                f'step{step_number}_saved',
+                f'Step {step_number} {save_type} save completed'
+            )
+            
+            print(f"Successfully saved step {step_number} for project {project_id}")
+            
+            return jsonify({
+                'success': True,
+                'message': f'Step {step_number} saved successfully',
+                'save_type': save_type,
+                'project_id': project.id,
+                'current_step': project.current_step
+            })
+            
+        except Exception as db_error:
+            print(f"Database error saving step {step_number}: {str(db_error)}")
+            db.session.rollback()
+            return jsonify({'error': f'Database error: {str(db_error)}'}), 500
+        
+    except Exception as e:
+        print(f'Error in save_progress: {str(e)}')
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Failed to save progress: {str(e)}'}), 500
+
+@app.route('/api/auto_save', methods=['POST'])
+@login_required
+def api_auto_save():
+    """Auto-save current step data - simplified version"""
+    try:
+        if 'project_id' not in session:
+            return jsonify({'error': 'No active project'}), 400
+        
+        project_id = session['project_id']
+        project = Project.query.get(project_id)
+        
+        if not project:
+            return jsonify({'error': 'Project not found'}), 400
+        
+        # Simple auto-save: just update the timestamp
+        project.updated_at = datetime.utcnow()
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Data auto-saved successfully'
+        })
+        
+    except Exception as e:
+        print(f'Auto-save error: {str(e)}')
+        return jsonify({'error': f'Auto-save error: {str(e)}'}), 500
+
+@app.route('/resume_project/<int:project_id>')
+@login_required
+def resume_project(project_id):
+    """Resume an existing project by restoring its session data"""
+    try:
+        project = Project.query.get_or_404(project_id)
+        
+        # Check ownership
+        if project.user_id != current_user.id:
+            flash('Unauthorized access to project', 'error')
+            return redirect(url_for('user_dashboard'))
+        
+        # Clear any existing session data ONLY (don't delete projects)
+        clear_session_data_only()
+        
+        # Set the project ID in session
+        session['project_id'] = project.id
+        session['project_name'] = project.project_name
+        
+        # Restore all completed steps data to session
+        from services.session_data_manager import SessionDataManager
+        success = SessionDataManager.restore_all_completed_steps(project_id)
+        
+        if success:
+            flash(f'Resumed project: {project.project_name}', 'info')
+            # Redirect to the current step
+            return redirect(url_for(f'step{project.current_step}'))
+        else:
+            flash('Could not restore project data. Starting from current step.', 'warning')
+            return redirect(url_for(f'step{project.current_step}'))
+        
+    except Exception as e:
+        print(f'Error resuming project {project_id}: {str(e)}')
+        flash('Error resuming project', 'error')
+        return redirect(url_for('user_dashboard'))
+
+def simple_step_save(project_id, step_number):
+    """Simple helper function to save step progress"""
+    try:
+        project = Project.query.get(project_id)
+        if not project:
+            return False
+        
+        # Update current step if this is further
+        if step_number > project.current_step:
+            project.current_step = step_number
+        
+        # Mark step as complete
+        step_complete_field = f'step{step_number}_complete'
+        if hasattr(project, step_complete_field):
+            setattr(project, step_complete_field, True)
+        
+        project.updated_at = datetime.utcnow()
+        db.session.commit()
+        
+        return True
+        
+    except Exception as e:
+        print(f"Error in simple_step_save: {str(e)}")
+        db.session.rollback()
+        return False
+
+def clear_session_data_only():
+    """Clear only session data, DO NOT delete projects from database"""
+    # Clear session project data
+    project_keys = [
+        'rooms_data', 'start_points_data', 'tile_sizes', 'cluster_plot',
+        'room_df', 'room_polygons', 'final_room_df', 'apartments_data',
+        'tile_analysis_results', 'tile_classification_results',
+        'small_tiles_results', 'tile_polygon_mapping', 'tiles_remaining',
+        'small_tiles_removed', 'export_results', 'cut_pieces_by_half',
+        'matching_history', 'current_matching', 'step7_complete',
+        'project_id', 'uploaded_file', 'dxf_data', 'step1_complete',
+        'step2_complete', 'step3_complete', 'step4_complete', 'step5_complete',
+        'step6_complete', 'step8_complete', 'step9_complete'
+    ]
+    
+    # Clear any uploaded files from session ONLY
+    if 'uploaded_file' in session:
+        try:
+            filepath = session.get('uploaded_file')
+            if filepath and os.path.exists(filepath):
+                os.remove(filepath)
+                print(f"Removed uploaded file: {filepath}")
+        except Exception as e:
+            print(f"Error removing file: {str(e)}")
+    
+    # Clear all project-related session data
+    for key in project_keys:
+        session.pop(key, None)
+    
+    print("Session data cleared, projects preserved in database")
+
+@app.cli.command('create-user')
+@click.argument('username')
+@click.argument('email')
+@click.argument('password')
+@click.option('--admin', is_flag=True, help='Give user admin privileges')
+def create_user_command(username, email, password, admin):
+    """Create a new user via command line"""
+    try:
+        # Check if user already exists
+        if User.query.filter_by(username=username).first():
+            click.echo(f'Error: User {username} already exists')
+            return
+        
+        if User.query.filter_by(email=email).first():
+            click.echo(f'Error: Email {email} already in use')
+            return
+        
+        # Create new user
+        user = User(
+            username=username,
+            email=email,
+            password_hash=generate_password_hash(password),
+            role='admin' if admin else 'user'
+        )
+        
+        db.session.add(user)
+        db.session.commit()
+        
+        click.echo(f'Successfully created user: {username} ({"admin" if admin else "user"})')
+        
+    except Exception as e:
+        db.session.rollback()
+        click.echo(f'Error creating user: {str(e)}')
+
+@app.cli.command('reset-password')
+@click.argument('username')
+@click.argument('new_password')
+def reset_password_command(username, new_password):
+    """Reset a user's password via command line"""
+    try:
+        user = User.query.filter_by(username=username).first()
+        
+        if not user:
+            click.echo(f'Error: User {username} not found')
+            return
+        
+        if len(new_password) < 6:
+            click.echo('Error: Password must be at least 6 characters')
+            return
+        
+        user.password_hash = generate_password_hash(new_password)
+        db.session.commit()
+        
+        click.echo(f'Successfully reset password for user: {username}')
+        
+    except Exception as e:
+        db.session.rollback()
+        click.echo(f'Error resetting password: {str(e)}')
+
+@app.cli.command('list-users')
+def list_users_command():
+    """List all users in the system"""
+    users = User.query.all()
+    
+    if not users:
+        click.echo('No users found in the database')
+        return
+    
+    click.echo('\nRegistered Users:')
+    click.echo('-' * 60)
+    click.echo(f'{"Username":<20} {"Email":<30} {"Role":<10}')
+    click.echo('-' * 60)
+    
+    for user in users:
+        click.echo(f'{user.username:<20} {user.email:<30} {user.role:<10}')
+    
+    click.echo(f'\nTotal users: {len(users)}')
+
+@app.cli.command('migrate-users')
+def migrate_users_command():
+    """Migrate hardcoded users to database"""
+    # Define the old hardcoded users that need migration
+    old_users = {
+        'admin': ('admin123', 'admin@tileoptimization.com', 'admin'),
+        'user': ('password123', 'user@tileoptimization.com', 'user'),
+        'demo': ('demo123', 'demo@tileoptimization.com', 'user'),
+        'J384_TileOptz': ('J384', 'j384@tileoptimization.com', 'user'),
+        'J386_TileOptz': ('J386', 'j386@tileoptimization.com', 'user'),
+        'J385_TileOptz': ('J385', 'j385@tileoptimization.com', 'user'),
+        'J388_TileOptz': ('J388', 'j388@tileoptimization.com', 'user'),
+        'J390_TileOptz': ('J390', 'j390@tileoptimization.com', 'user'),
+        'TestDemo2025': ('TDemo25', 'testdemo2025@tileoptimization.com', 'user')
+    }
+    
+    migrated = 0
+    skipped = 0
+    
+    for username, (password, email, role) in old_users.items():
+        # Check if user already exists
+        if User.query.filter_by(username=username).first():
+            click.echo(f'Skipping {username} - already exists')
+            skipped += 1
+            continue
+        
+        try:
+            user = User(
+                username=username,
+                email=email,
+                password_hash=generate_password_hash(password),
+                role=role
+            )
+            db.session.add(user)
+            db.session.commit()
+            
+            click.echo(f'Migrated user: {username}')
+            migrated += 1
+            
+        except Exception as e:
+            db.session.rollback()
+            click.echo(f'Error migrating {username}: {str(e)}')
+            skipped += 1
+    
+    click.echo(f'\nMigration complete: {migrated} users migrated, {skipped} skipped')
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)

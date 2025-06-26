@@ -8,7 +8,22 @@
 {% block progress_text %}User Registration{% endblock %}
 
 {% block head_extra %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
 <style>
+    :root {
+        --primary-color: #667eea;
+        --secondary-color: #764ba2;
+        --border-radius: 15px;
+        --shadow: 0 10px 30px rgba(0,0,0,0.1);
+        --transition: all 0.3s ease;
+    }
+    
+    body {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        font-family: 'Inter', sans-serif;
+    }
+    
     .register-container {
         max-width: 500px;
         margin: 2rem auto;
@@ -65,8 +80,19 @@
     }
     
     .form-control {
+        width: 100%;
         font-size: 1rem;
         padding: 0.875rem 1rem;
+        border: 2px solid #e5e7eb;
+        border-radius: 8px;
+        transition: var(--transition);
+        background: #ffffff;
+    }
+    
+    .form-control:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
     }
     
     .requirements {
@@ -86,12 +112,19 @@
         width: 100%;
         transition: var(--transition);
         box-shadow: 0 6px 20px rgba(102, 126, 234, 0.3);
+        cursor: pointer;
     }
     
     .btn-register:hover {
         transform: translateY(-2px);
         box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
         color: white;
+    }
+    
+    .btn-register:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+        transform: none;
     }
     
     .login-link {
@@ -114,6 +147,22 @@
     
     .alert {
         margin-bottom: 1.5rem;
+        border-radius: 8px;
+    }
+    
+    .disabled-message {
+        background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+        color: white;
+        padding: 1.5rem;
+        border-radius: 12px;
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+    
+    .disabled-message i {
+        font-size: 2rem;
+        margin-bottom: 1rem;
+        display: block;
     }
 </style>
 {% endblock %}
@@ -141,7 +190,15 @@
         {% endif %}
     {% endwith %}
 
-    <form method="POST" id="registerForm">
+    <!-- Registration Disabled Message -->
+    <div class="disabled-message">
+        <i class="bi bi-info-circle-fill"></i>
+        <h4>Registration Currently Unavailable</h4>
+        <p>New user registration is managed by administrators. Please contact your system administrator to request an account.</p>
+    </div>
+
+    <!-- Registration Form (Disabled) -->
+    <form method="POST" id="registerForm" style="opacity: 0.5; pointer-events: none;">
         <div class="input-group">
             <label for="username">Username</label>
             <input type="text" 
@@ -149,6 +206,7 @@
                    id="username" 
                    name="username" 
                    required 
+                   disabled
                    autocomplete="username"
                    placeholder="Choose a username">
             <div class="requirements">Minimum 3 characters</div>
@@ -161,6 +219,7 @@
                    id="email" 
                    name="email" 
                    required 
+                   disabled
                    autocomplete="email"
                    placeholder="your.email@example.com">
             <div class="requirements">Valid email address required</div>
@@ -173,6 +232,7 @@
                    id="password" 
                    name="password" 
                    required 
+                   disabled
                    autocomplete="new-password"
                    placeholder="Create a strong password">
             <div class="requirements">Minimum 6 characters</div>
@@ -185,51 +245,59 @@
                    id="confirm_password" 
                    name="confirm_password" 
                    required 
+                   disabled
                    autocomplete="new-password"
                    placeholder="Re-enter your password">
         </div>
 
-        <button type="submit" class="btn-register">
+        <button type="submit" class="btn-register" disabled>
             <i class="bi bi-person-plus me-2"></i>Create Account
         </button>
     </form>
 
     <div class="login-link">
-        Already have an account? <a href="{{ url_for('login') }}">Sign in here</a>
+        Already have an account? 
+        <a href="{{ url_for('login') }}">Sign in here</a>
     </div>
 </div>
 {% endblock %}
 
 {% block javascript %}
-// Form validation and enhancement
+<script>
+// Form validation and enhancement (kept for future use)
 document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('registerForm');
     const password = document.getElementById('password');
     const confirmPassword = document.getElementById('confirm_password');
     
     // Password confirmation validation
-    confirmPassword.addEventListener('input', function() {
-        if (password.value !== confirmPassword.value) {
-            confirmPassword.setCustomValidity('Passwords do not match');
-        } else {
-            confirmPassword.setCustomValidity('');
-        }
-    });
+    if (confirmPassword) {
+        confirmPassword.addEventListener('input', function() {
+            if (password.value !== confirmPassword.value) {
+                confirmPassword.setCustomValidity('Passwords do not match');
+            } else {
+                confirmPassword.setCustomValidity('');
+            }
+        });
+    }
     
     // Form submission with loading state
-    form.addEventListener('submit', function(e) {
-        const button = document.querySelector('.btn-register');
-        
-        // Validate passwords match
-        if (password.value !== confirmPassword.value) {
-            e.preventDefault();
-            alert('Passwords do not match');
-            return;
-        }
-        
-        // Show loading state
-        button.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Creating Account...';
-        button.disabled = true;
-    });
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            const button = document.querySelector('.btn-register');
+            
+            // Validate passwords match
+            if (password.value !== confirmPassword.value) {
+                e.preventDefault();
+                alert('Passwords do not match');
+                return;
+            }
+            
+            // Show loading state
+            button.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Creating Account...';
+            button.disabled = true;
+        });
+    }
 });
+</script>
 {% endblock %}

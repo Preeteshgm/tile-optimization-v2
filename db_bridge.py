@@ -12,26 +12,20 @@ class DatabaseBridge:
         self.app = app
     
     def get_or_create_project(self, user_id, project_name=None):
-        """Get current project or create new one"""
+        """Get current project or return None - DON'T auto-create projects"""
         # Check for incomplete project
         project = Project.query.filter_by(
             user_id=user_id,
             is_complete=False
         ).order_by(Project.created_at.desc()).first()
         
-        if not project:
-            # Create new project
-            project = Project(
-                user_id=user_id,
-                project_name=project_name or f"Project {datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            )
-            db.session.add(project)
-            db.session.commit()
-            
-            # Log activity
-            self.log_activity(user_id, project.id, 'project_created', f'Created project: {project.project_name}')
+        # Return existing project if found
+        if project:
+            return project
         
-        return project
+        # Don't auto-create projects anymore
+        # Force users to go through new_project form
+        return None
     
     def save_rooms_from_session(self, project_id, rooms_data):
         """Save rooms from session format to database"""

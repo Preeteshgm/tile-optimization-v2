@@ -8,27 +8,29 @@ class ProjectManager:
     
     @staticmethod
     def can_create_project(user):
-        """Check if user can create new project"""
-        # Get user's active projects count
-        active_projects = user.projects.filter_by(is_complete=False).count()
+        """Check if user can create new project - NOW COUNTS ALL PROJECTS"""
+        # Get user's TOTAL projects count (both active and completed)
+        total_projects = user.projects.count()  # This counts ALL projects
         project_limit = getattr(user, 'project_limit', 5)
         
-        return active_projects < project_limit
+        return total_projects < project_limit
     
     @staticmethod
     def get_user_project_stats(user):
-        """Get project statistics for user"""
+        """Get project statistics for user - Updated for total project quota"""
         projects = user.projects.all()
         active_projects = [p for p in projects if not p.is_complete]
         completed_projects = [p for p in projects if p.is_complete]
+        total_projects = len(projects)  # This is what counts toward the limit
+        project_limit = getattr(user, 'project_limit', 5)
         
         return {
-            'total_projects': len(projects),
-            'active_projects': len(active_projects),
-            'completed_projects': len(completed_projects),
-            'project_limit': getattr(user, 'project_limit', 5),
-            'remaining_slots': getattr(user, 'project_limit', 5) - len(active_projects),
-            'can_create_new': ProjectManager.can_create_project(user)
+            'total_projects': total_projects,           # All projects (what counts toward limit)
+            'active_projects': len(active_projects),    # In-progress projects
+            'completed_projects': len(completed_projects), # Finished projects
+            'project_limit': project_limit,             # Maximum allowed (5)
+            'remaining_slots': project_limit - total_projects,  # How many can still create
+            'can_create_new': total_projects < project_limit   # Can create new project?
         }
     
     @staticmethod

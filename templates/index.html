@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tile Optimization Portal</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
     {% block head_extra %}{% endblock %}
     <style>
@@ -37,9 +38,9 @@
             border-color: var(--primary-dark);
         }
         
-        /* Step indicator styling */
+        /* Enhanced Step indicator styling */
         .step-indicator {
-            margin-bottom: 20px;
+            margin-bottom: 30px;
         }
         
         .step {
@@ -50,16 +51,55 @@
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
-            padding: 0 5px;
+            padding: 8px 5px;
+            cursor: default;
+            transition: all 0.3s ease;
+            border-radius: 8px;
         }
         
         .step.active {
             color: var(--primary-color);
             font-weight: bold;
+            background-color: var(--primary-light);
         }
         
         .step.completed {
             color: var(--primary-color);
+            cursor: pointer;
+            border: 1px solid var(--primary-light);
+        }
+        
+        .step.completed:hover {
+            background-color: var(--primary-light);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(25, 135, 84, 0.2);
+        }
+        
+        .step.disabled {
+            color: #adb5bd;
+            cursor: not-allowed;
+        }
+
+        /* Step icons */
+        .step-icon {
+            display: block;
+            font-size: 1.2rem;
+            margin-bottom: 4px;
+        }
+        
+        .step.completed .step-icon {
+            color: var(--primary-color);
+        }
+        
+        .step.active .step-icon {
+            color: var(--primary-color);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
         }
 
         /* Progress bar width classes */
@@ -71,12 +111,78 @@
         .progress-width-70 { width: 70%; }
         .progress-width-84 { width: 84%; }
         .progress-width-100 { width: 100%; }
+        
+        /* Save indicator */
+        .save-indicator {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(25, 135, 84, 0.9);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            z-index: 1050;
+            opacity: 0;
+            transform: translateY(-20px);
+            transition: all 0.3s ease;
+        }
+        
+        .save-indicator.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        
+        /* Project info bar */
+        .project-info-bar {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .project-info-bar.has-project {
+            border-color: var(--primary-color);
+            background: rgba(25, 135, 84, 0.05);
+        }
     </style>
 </head>
 <body>
     <div class="container-fluid">
         <header class="my-4">
             <h1 class="text-center">Tile Optimization Portal</h1>
+            
+            <!-- Project Information Bar -->
+            {% if session.project_id %}
+            <div class="project-info-bar has-project">
+                <div class="row align-items-center">
+                    <div class="col-md-6">
+                        <h6 class="mb-1">
+                            <i class="bi bi-folder-open me-2"></i>
+                            Current Project: {{ session.get('project_name', 'Unnamed Project') }}
+                        </h6>
+                        <small class="text-muted">
+                            Project ID: #{{ session.project_id }}
+                            <span class="ms-3">
+                                <i class="bi bi-clock me-1"></i>
+                                Auto-save enabled
+                            </span>
+                        </small>
+                    </div>
+                    <div class="col-md-6 text-end">
+                        <button class="btn btn-outline-primary btn-sm me-2" onclick="saveCurrentProgress()">
+                            <i class="bi bi-cloud-arrow-up me-1"></i>Save Progress
+                        </button>
+                        <a href="{{ url_for('user_dashboard') }}" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-speedometer2 me-1"></i>Dashboard
+                        </a>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            
             <div class="progress mb-4">
                 <div class="progress-bar progress-width-{% block progress_width_value %}0{% endblock %}" 
                      role="progressbar" 
@@ -86,18 +192,70 @@
                      {% block progress_text %}{% endblock %}
                 </div>
             </div>
+            
             <div class="step-indicator d-flex justify-content-between">
-                <div class="step {% block step1_active %}{% endblock %}">Step 1: Load DXF</div>
-                <div class="step {% block step2_active %}{% endblock %}">Step 2: Name Rooms</div>
-                <div class="step {% block step3_active %}{% endblock %}">Step 3: Set Orientation</div>
-                <div class="step {% block step4_active %}{% endblock %}">Step 4: Tile Coverage</div>
-                <div class="step {% block step5_active %}{% endblock %}">Step 5: Classification</div>
-                <div class="step {% block step6_active %}{% endblock %}">Step 6: Identify Small Cuts</div>
-                <div class="step {% block step7_active %}{% endblock %}">Step 7: Export</div>
-                <div class="step {% block step8_active %}{% endblock %}">Step 8: Optimize</div>
-                <div class="step {% block step9_active %}{% endblock %}">Step 9: Reports</div>
+                <div class="step {% block step1_active %}{% endblock %}" 
+                     data-step="1" 
+                     onclick="navigateToStep(1, this)">
+                    <i class="step-icon bi bi-file-earmark-arrow-up"></i>
+                    <div>Load DXF</div>
+                </div>
+                <div class="step {% block step2_active %}{% endblock %}" 
+                     data-step="2" 
+                     onclick="navigateToStep(2, this)">
+                    <i class="step-icon bi bi-building"></i>
+                    <div>Name Rooms</div>
+                </div>
+                <div class="step {% block step3_active %}{% endblock %}" 
+                     data-step="3" 
+                     onclick="navigateToStep(3, this)">
+                    <i class="step-icon bi bi-compass"></i>
+                    <div>Set Orientation</div>
+                </div>
+                <div class="step {% block step4_active %}{% endblock %}" 
+                     data-step="4" 
+                     onclick="navigateToStep(4, this)">
+                    <i class="step-icon bi bi-grid-3x3"></i>
+                    <div>Tile Coverage</div>
+                </div>
+                <div class="step {% block step5_active %}{% endblock %}" 
+                     data-step="5" 
+                     onclick="navigateToStep(5, this)">
+                    <i class="step-icon bi bi-tags"></i>
+                    <div>Classification</div>
+                </div>
+                <div class="step {% block step6_active %}{% endblock %}" 
+                     data-step="6" 
+                     onclick="navigateToStep(6, this)">
+                    <i class="step-icon bi bi-scissors"></i>
+                    <div>Small Cuts</div>
+                </div>
+                <div class="step {% block step7_active %}{% endblock %}" 
+                     data-step="7" 
+                     onclick="navigateToStep(7, this)">
+                    <i class="step-icon bi bi-download"></i>
+                    <div>Export</div>
+                </div>
+                <div class="step {% block step8_active %}{% endblock %}" 
+                     data-step="8" 
+                     onclick="navigateToStep(8, this)">
+                    <i class="step-icon bi bi-gear"></i>
+                    <div>Optimize</div>
+                </div>
+                <div class="step {% block step9_active %}{% endblock %}" 
+                     data-step="9" 
+                     onclick="navigateToStep(9, this)">
+                    <i class="step-icon bi bi-file-text"></i>
+                    <div>Reports</div>
+                </div>
             </div>
         </header>
+        
+        <!-- Save indicator -->
+        <div id="saveIndicator" class="save-indicator">
+            <i class="bi bi-check-circle me-2"></i>
+            Progress saved automatically
+        </div>
         
         <main class="mb-5">
             {% block content %}
@@ -107,73 +265,53 @@
                     <div class="card mb-4 border-0 shadow">
                         <div class="card-body p-0">
                             <div class="hero-banner bg-success text-white p-5 d-flex align-items-center position-relative overflow-hidden">
-                                <div class="container position-relative z-3">
+                                <div class="container position-relative">
                                     <div class="row align-items-center">
-                                        <div class="col-lg-7">
-                                            <h1 class="display-4 fw-bold mb-3">Tile Optimization Portal</h1>
-                                            <p class="lead mb-4">Transform your architectural DXF files into optimized tile layouts with intelligent material wastage analysis</p>
-                                            <a href="{{ url_for('step1') }}" class="btn btn-light btn-lg px-4 py-2 fw-semibold shadow-sm">
-                                                <i class="bi bi-play-fill"></i> Start New Project
+                                        <div class="col-md-8">
+                                            <h2 class="display-5 fw-bold mb-3">Transform Your DXF Files into Optimized Tile Layouts</h2>
+                                            <p class="lead">This web application helps you process DXF files to create optimized tile layouts with material wastage analysis.</p>
+                                            
+                                            <p>The application follows a step-by-step workflow:</p>
+                                            <ol>
+                                                <li><strong>Load DXF File</strong> - Extract room boundaries and start points</li>
+                                                <li><strong>Name Rooms</strong> - Assign meaningful names to apartments and rooms</li>
+                                                <li><strong>Set Orientation</strong> - Control apartment orientations</li>
+                                                <li><strong>Tile Coverage</strong> - Generate grid-aligned tiles with grout spacing</li>
+                                                <li><strong>Tile Classification</strong> - Classify tiles into full, cut, and irregular types</li>
+                                                <li><strong>Identify Small Cuts</strong> - Find problematic small cut tiles</li>
+                                                <li><strong>Export</strong> - Generate comprehensive report with wastage analysis</li>
+                                                <li><strong>Optimize</strong> - Optimize cut piece usage across apartments</li>
+                                                <li><strong>Reports</strong> - Generate detailed match reports for implementation</li>
+                                            </ol>
+                                            
+                                            <p>Click the button below to get started with your DXF file.</p>
+                                            
+                                            <a href="{{ url_for('step1') }}" class="btn btn-success btn-lg mt-3">
+                                                Start New Project
                                             </a>
                                         </div>
-                                        <div class="col-lg-5 text-center text-lg-end mt-4 mt-lg-0">
-                                            <!-- Enhanced logo container with floating effect -->
-                                            <div class="logo-container bg-white p-4 rounded-circle shadow-lg d-inline-flex align-items-center justify-content-center" style="width: 200px; height: 200px;">
-                                                <img src="{{ url_for('static', filename='images/company-logo.png') }}" alt="Tile Optimization Logo" class="img-fluid" style="max-width: 170px;" id="company-logo">
+                                        <div class="col-md-4">
+                                            <div class="card">
+                                                <div class="card-header bg-success bg-opacity-10">
+                                                    <h5 class="text-success">DXF File Requirements</h5>
+                                                </div>
+                                                <div class="card-body">
+                                                    <ul class="list-unstyled">
+                                                        <li><i class="bi bi-check-circle-fill text-success me-2"></i>AutoCAD DXF format</li>
+                                                        <li><i class="bi bi-check-circle-fill text-success me-2"></i>Room boundaries as closed polylines</li>
+                                                        <li><i class="bi bi-check-circle-fill text-success me-2"></i>Start points marked as points/circles</li>
+                                                        <li><i class="bi bi-check-circle-fill text-success me-2"></i>Drawings in 2D plan view</li>
+                                                        <li><i class="bi bi-check-circle-fill text-success me-2"></i>Metric units preferred</li>
+                                                    </ul>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
-                                <!-- Enhanced tile pattern background with animation -->
-                                <div class="ceramic-pattern position-absolute z-1 top-0 start-0 w-100 h-100"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="card">
-                        <div class="card-header">
-                            <h2>Welcome to Tile Layout Application</h2>
-                        </div>
-                        <div class="card-body">
-                            <div class="row">
-                                <div class="col-md-8">
-                                    <h4>Transform Your DXF Files into Optimized Tile Layouts</h4>
-                                    <p class="lead">This web application helps you process DXF files to create optimized tile layouts with material wastage analysis.</p>
-                                    
-                                    <p>The application follows a step-by-step workflow:</p>
-                                    <ol>
-                                        <li><strong>Load DXF File</strong> - Extract room boundaries and start points</li>
-                                        <li><strong>Name Rooms</strong> - Assign meaningful names to apartments and rooms</li>
-                                        <li><strong>Set Orientation</strong> - Control apartment orientations</li>
-                                        <li><strong>Tile Coverage</strong> - Generate grid-aligned tiles with grout spacing</li>
-                                        <li><strong>Tile Classification</strong> - Classify tiles into full, cut, and irregular types</li>
-                                        <li><strong>Identify Small Cuts</strong> - Find problematic small cut tiles</li>
-                                        <li><strong>Export</strong> - Generate comprehensive report with wastage analysis</li>
-                                        <li><strong>Optimize</strong> - Optimize cut piece usage across apartments</li>
-                                        <li><strong>Reports</strong> - Generate detailed match reports for implementation</li>
-                                    </ol>
-                                    
-                                    <p>Click the button below to get started with your DXF file.</p>
-                                    
-                                    <a href="{{ url_for('step1') }}" class="btn btn-success btn-lg mt-3">
-                                        Start New Project
-                                    </a>
-                                </div>
-                                <div class="col-md-4">
-                                    <div class="card">
-                                        <div class="card-header bg-success bg-opacity-10">
-                                            <h5 class="text-success">DXF File Requirements</h5>
-                                        </div>
-                                        <div class="card-body">
-                                            <p>For optimal results, your DXF file should include:</p>
-                                            <ul>
-                                                <li>Room boundaries on a layer named <code>"Tile Layout"</code></li>
-                                                <li>Starting points for tile placement on a layer named <code>"SP"</code></li>
-                                                <li>Start points should be closed polylines to indicate tile size</li>
-                                                <li>Clear separation between different rooms</li>
-                                            </ul>
-                                        </div>
-                                    </div>
+                                
+                                <!-- Floating tile decoration -->
+                                <div class="position-absolute" style="top: 20%; right: -5%; opacity: 0.1; font-size: 8rem; color: white;">
+                                    <i class="bi bi-grid-3x3"></i>
                                 </div>
                             </div>
                         </div>
@@ -183,110 +321,150 @@
             {% endblock %}
         </main>
         
-        <footer class="text-center py-3">
+        <!-- Previous/Next Step Navigation (maintained for compatibility) -->
+        <nav class="mt-5">
             <div class="row">
-                <div class="col-md-4 text-md-start">
+                <div class="col-6">
                     {% block prev_step %}{% endblock %}
                 </div>
-                <div class="col-md-4">
-                    <p>Tile Optimization Portal</p>
-                </div>
-                <div class="col-md-4 text-md-end">
-                    {% block next_step %}
-                    <a href="{{ url_for('step1') }}" class="btn btn-success">Get Started</a>
-                    {% endblock %}
+                <div class="col-6 text-end">
+                    {% block next_step %}{% endblock %}
                 </div>
             </div>
-        </footer>
+        </nav>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
-    {% block extra_scripts %}{% endblock %}
     
-    <style>
-        /* More realistic ceramic tile pattern */
-        .ceramic-pattern {
-            background-color: #198754;
-            background-image: 
-              linear-gradient(rgba(255, 255, 255, 0.3) 1px, transparent 1px),
-              linear-gradient(90deg, rgba(255, 255, 255, 0.3) 1px, transparent 1px),
-              linear-gradient(rgba(255, 255, 255, 0.1) 1px, transparent 1px),
-              linear-gradient(90deg, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
-            background-size: 100px 100px, 100px 100px, 20px 20px, 20px 20px;
-            background-position: -1px -1px, -1px -1px, -1px -1px, -1px -1px;
-            opacity: 0.15;
+    <!-- Navigation and Save JavaScript -->
+    <script>
+        // Navigation functionality
+        function navigateToStep(stepNumber, element) {
+            // Check if step is clickable (completed or active)
+            if (!element.classList.contains('completed') && !element.classList.contains('active')) {
+                // Show message that step is not accessible yet
+                showMessage('Please complete previous steps first', 'warning');
+                return;
+            }
+            
+            // If it's the current step, don't navigate
+            if (element.classList.contains('active')) {
+                return;
+            }
+            
+            // Show loading state
+            element.style.opacity = '0.6';
+            const originalIcon = element.querySelector('.step-icon').className;
+            element.querySelector('.step-icon').className = 'step-icon bi bi-arrow-clockwise';
+            
+            // Navigate using the navigation route (which handles data restoration)
+            window.location.href = '/navigate_to_step/' + stepNumber;
         }
         
-        /* Enhanced logo container with floating effect */
-        .logo-container {
-            position: relative;
-            overflow: hidden;
-            transition: all 0.5s ease;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-            animation: float 6s ease-in-out infinite;
-        }
-
-        /* Floating animation for logo */
-        @keyframes float {
-            0% {
-                transform: translateY(0px);
+        // Save progress functionality
+        function saveCurrentProgress() {
+            const saveBtn = document.querySelector('button[onclick="saveCurrentProgress()"]');
+            if (saveBtn) {
+                saveBtn.disabled = true;
+                saveBtn.innerHTML = '<i class="bi bi-cloud-arrow-up me-1"></i>Saving...';
             }
-            50% {
-                transform: translateY(-10px);
-            }
-            100% {
-                transform: translateY(0px);
-            }
+            
+            fetch('/api/save_progress', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    step_number: getCurrentStep(),
+                    manual_save: true
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showSaveIndicator();
+                } else {
+                    showMessage('Failed to save progress', 'error');
+                }
+            })
+            .catch(error => {
+                showMessage('Error saving progress', 'error');
+            })
+            .finally(() => {
+                if (saveBtn) {
+                    saveBtn.disabled = false;
+                    saveBtn.innerHTML = '<i class="bi bi-cloud-arrow-up me-1"></i>Save Progress';
+                }
+            });
         }
         
-        /* Add sheen effect to logo */
-        .logo-container::after {
-            content: '';
-            position: absolute;
-            top: -100%;
-            left: -100%;
-            width: 50%;
-            height: 200%;
-            background: linear-gradient(
-                to right,
-                rgba(255, 255, 255, 0) 0%,
-                rgba(255, 255, 255, 0.3) 50%,
-                rgba(255, 255, 255, 0) 100%
-            );
-            transform: rotate(25deg);
-            animation: sheen 6s infinite;
+        // Get current step number
+        function getCurrentStep() {
+            for (let i = 1; i <= 9; i++) {
+                const stepElement = document.querySelector(`[data-step="${i}"]`);
+                if (stepElement && stepElement.classList.contains('active')) {
+                    return i;
+                }
+            }
+            return 1;
         }
         
-        @keyframes sheen {
-            0%, 10% {
-                left: -100%;
-                opacity: 0;
-            }
-            20% {
-                left: 100%;
-                opacity: 0.6;
-            }
-            100% {
-                left: 100%;
-                opacity: 0;
-            }
+        // Show save indicator
+        function showSaveIndicator() {
+            const indicator = document.getElementById('saveIndicator');
+            indicator.classList.add('show');
+            setTimeout(() => {
+                indicator.classList.remove('show');
+            }, 3000);
         }
         
-        .hero-banner {
-            border-radius: 0.375rem;
-            min-height: 380px;
-            background: linear-gradient(135deg, #198754, #157347);
-        }
-
-        /* Z-index helpers */
-        .z-1 {
-            z-index: 1;
+        // Show temporary message
+        function showMessage(message, type) {
+            // Create temporary alert
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show position-fixed`;
+            alert.style.cssText = 'top: 20px; left: 50%; transform: translateX(-50%); z-index: 1060; min-width: 300px;';
+            alert.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.body.appendChild(alert);
+            
+            // Auto remove after 5 seconds
+            setTimeout(() => {
+                if (alert.parentNode) {
+                    alert.remove();
+                }
+            }, 5000);
         }
         
-        .z-3 {
-            z-index: 3;
-        }
-    </style>
+        // Auto-save functionality (called by individual step pages)
+        window.autoSave = function(stepNumber, stepData) {
+            fetch('/api/save_progress', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    step_number: stepNumber,
+                    step_data: stepData,
+                    auto_save: true
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    console.log(`Step ${stepNumber} auto-saved successfully`);
+                }
+            })
+            .catch(error => {
+                console.error('Auto-save failed:', error);
+            });
+        };
+    </script>
+    
+    <!-- Individual step scripts -->
+    {% block scripts %}{% endblock %}
+    {% block extra_scripts %}{% endblock %}
 </body>
 </html>

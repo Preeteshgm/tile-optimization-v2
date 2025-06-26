@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Change Password - Tile Optimization Portal</title>
+    <title>New Project - Tile Optimization Portal</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -30,13 +30,13 @@
             padding: 20px;
         }
 
-        .password-container {
+        .project-container {
             max-width: 1400px;
             margin: 0 auto;
         }
 
         /* Header - Same as Admin Panel */
-        .password-header {
+        .project-header {
             background: rgba(255, 255, 255, 0.1);
             backdrop-filter: blur(20px);
             border: 1px solid rgba(255, 255, 255, 0.2);
@@ -48,13 +48,13 @@
             position: relative;
         }
 
-        .password-header h1 {
+        .project-header h1 {
             font-size: 2.5rem;
             font-weight: 700;
             margin-bottom: 10px;
         }
 
-        .password-header p {
+        .project-header p {
             opacity: 0.9;
             margin: 0;
             font-size: 1.1rem;
@@ -151,27 +151,6 @@
             padding: 40px;
         }
 
-        /* Current User Info */
-        .user-info-banner {
-            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
-            color: white;
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 30px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .user-info-banner i {
-            margin-right: 12px;
-            font-size: 1.3rem;
-        }
-
-        .user-info-banner strong {
-            font-weight: 600;
-        }
-
         /* Form Styling */
         .form-group {
             margin-bottom: 25px;
@@ -190,13 +169,18 @@
             color: var(--primary-color);
         }
 
+        .form-group label .required {
+            color: var(--danger-color);
+            margin-left: 5px;
+        }
+
         .input-container {
             position: relative;
         }
 
         .form-control {
             width: 100%;
-            padding: 15px 45px 15px 16px;
+            padding: 15px 16px;
             border: 2px solid #e5e7eb;
             border-radius: 10px;
             font-size: 1rem;
@@ -210,56 +194,18 @@
             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
         }
 
-        .password-toggle {
-            position: absolute;
-            right: 12px;
-            top: 50%;
-            transform: translateY(-50%);
-            background: none;
-            border: none;
-            color: #6b7280;
-            cursor: pointer;
-            padding: 8px;
-            border-radius: 6px;
-            transition: var(--transition);
-        }
-
-        .password-toggle:hover {
-            color: var(--primary-color);
-            background: rgba(102, 126, 234, 0.1);
-        }
-
         .form-text {
             font-size: 0.875rem;
             color: #6b7280;
             margin-top: 8px;
         }
 
-        /* Password Strength Indicator */
-        .password-strength {
-            margin-top: 10px;
-            height: 6px;
-            background: #e5e7eb;
-            border-radius: 3px;
-            overflow: hidden;
-        }
-
-        .strength-bar {
-            height: 100%;
-            width: 0%;
-            transition: var(--transition);
-            border-radius: 3px;
-        }
-
-        .strength-weak { background: var(--danger-color); }
-        .strength-fair { background: var(--warning-color); }
-        .strength-good { background: var(--info-color); }
-        .strength-strong { background: var(--success-color); }
-
-        .strength-text {
-            font-size: 0.8rem;
-            margin-top: 6px;
-            font-weight: 500;
+        /* Character Counter */
+        .char-counter {
+            text-align: right;
+            margin-top: 5px;
+            font-size: 0.85rem;
+            color: #a0aec0;
         }
 
         /* Button Group */
@@ -314,22 +260,26 @@
         }
 
         /* Loading State */
-        .btn-modern.loading .btn-text {
-            opacity: 0;
+        .btn-modern:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
         }
 
-        .btn-loading {
-            position: absolute;
-            opacity: 0;
-            transition: opacity 0.3s ease;
+        .loading-spinner {
+            display: none;
+            width: 20px;
+            height: 20px;
+            border: 2px solid transparent;
+            border-top: 2px solid currentColor;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
         }
 
-        .btn-modern.loading .btn-loading {
-            opacity: 1;
-        }
-
-        .btn-modern.loading {
-            pointer-events: none;
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
         /* Alert Styling */
@@ -352,52 +302,84 @@
             border-left: 4px solid var(--danger-color);
         }
 
-        /* Security Tips Panel */
-        .security-panel {
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
-            border-radius: 12px;
-            padding: 25px;
+        /* Features Section */
+        .features-section {
+            background: white;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow);
             margin-top: 30px;
+            overflow: hidden;
         }
 
-        .security-panel h6 {
-            color: #374151;
-            font-weight: 600;
-            margin-bottom: 15px;
+        .features-header {
+            background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+            padding: 25px 30px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .features-header h4 {
+            margin: 0;
+            color: #1f2937;
+            font-weight: 700;
             display: flex;
             align-items: center;
         }
 
-        .security-panel h6 i {
+        .features-header h4 i {
             margin-right: 10px;
             color: var(--info-color);
         }
 
-        .tips-grid {
+        .features-grid {
+            padding: 30px;
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 15px;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
         }
 
-        .tip-item {
+        .feature-item {
             display: flex;
             align-items: flex-start;
-            padding: 10px;
-            background: white;
-            border-radius: 8px;
+            gap: 15px;
+            padding: 20px;
+            background: #f8fafc;
             border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            transition: var(--transition);
         }
 
-        .tip-item i {
-            color: var(--success-color);
-            margin-right: 10px;
-            margin-top: 2px;
+        .feature-item:hover {
+            background: white;
+            border-color: var(--primary-color);
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.1);
         }
 
-        .tip-item span {
-            color: #4b5563;
+        .feature-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            flex-shrink: 0;
+            font-size: 1.2rem;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .feature-text h5 {
+            margin: 0 0 5px 0;
+            font-size: 1rem;
+            color: #1f2937;
+            font-weight: 600;
+        }
+
+        .feature-text p {
+            margin: 0;
             font-size: 0.9rem;
+            color: #6b7280;
             line-height: 1.4;
         }
 
@@ -407,7 +389,7 @@
                 padding: 10px;
             }
             
-            .password-header h1 {
+            .project-header h1 {
                 font-size: 2rem;
             }
             
@@ -425,19 +407,20 @@
                 flex-direction: column;
             }
             
-            .tips-grid {
+            .features-grid {
                 grid-template-columns: 1fr;
+                padding: 20px;
             }
         }
     </style>
 </head>
 <body>
-    <div class="password-container">
+    <div class="project-container">
         <!-- Header - Same as Admin Panel -->
-        <div class="password-header">
+        <div class="project-header">
             <div class="text-center position-relative">
-                <h1><i class="bi bi-key me-3"></i>Account Security</h1>
-                <p>Change your password to maintain account security and data protection</p>
+                <h1><i class="bi bi-folder-plus me-3"></i>Start New Project</h1>
+                <p>Create a new tile optimization project with custom settings and preferences</p>
                 
                 <!-- Quick Links - Top Right Corner -->
                 <div class="quick-links">
@@ -452,6 +435,9 @@
                         <i class="bi bi-shield-lock"></i>
                     </a>
                     {% endif %}
+                    <a href="{{ url_for('change_password') }}" class="quick-link-btn" title="Settings">
+                        <i class="bi bi-gear"></i>
+                    </a>
                     <a href="{{ url_for('logout') }}" class="quick-link-btn logout-btn" title="Logout">
                         <i class="bi bi-box-arrow-right"></i>
                     </a>
@@ -475,106 +461,146 @@
         <!-- Main Content Card -->
         <div class="content-card">
             <div class="card-header-modern">
-                <h4><i class="bi bi-shield-lock"></i>Change Password</h4>
-                <span class="text-muted">Update your account credentials</span>
+                <h4><i class="bi bi-pencil-square"></i>Project Information</h4>
+                <span class="text-muted">Configure your new project settings</span>
             </div>
 
             <div class="form-section">
-                <!-- Current User Info -->
-                <div class="user-info-banner">
-                    <i class="bi bi-person-circle"></i>
-                    <span>Logged in as: <strong>{{ current_user.username }}</strong></span>
-                </div>
+                <form method="POST" action="{{ url_for('new_project') }}" id="projectForm">
+                    <!-- Project Name -->
+                    <div class="form-group">
+                        <label for="project_name">
+                            <i class="bi bi-tag"></i>Project Name
+                            <span class="required">*</span>
+                        </label>
+                        <div class="input-container">
+                            <input type="text" 
+                                   class="form-control"
+                                   id="project_name" 
+                                   name="project_name" 
+                                   placeholder="e.g., Downtown Plaza Renovation"
+                                   required 
+                                   maxlength="100"
+                                   autofocus>
+                        </div>
+                        <div class="form-text">Give your project a unique, memorable name for easy identification</div>
+                    </div>
 
-                <form method="POST" id="passwordForm">
+                    <!-- Project Area -->
                     <div class="form-group">
-                        <label for="current_password">
-                            <i class="bi bi-lock"></i>Current Password
+                        <label for="project_area">
+                            <i class="bi bi-rulers"></i>Estimated Project Area (m²)
                         </label>
                         <div class="input-container">
-                            <input type="password" class="form-control" id="current_password" name="current_password" required>
-                            <button type="button" class="password-toggle" data-target="current_password">
-                                <i class="bi bi-eye"></i>
-                            </button>
+                            <input type="number" 
+                                   class="form-control"
+                                   id="project_area" 
+                                   name="project_area" 
+                                   placeholder="e.g., 5000"
+                                   min="0"
+                                   step="0.01">
                         </div>
+                        <div class="form-text">Optional: Total area to be tiled (will be calculated automatically from DXF if not provided)</div>
                     </div>
-                    
+
+                    <!-- Project Description -->
                     <div class="form-group">
-                        <label for="new_password">
-                            <i class="bi bi-shield-lock"></i>New Password
+                        <label for="project_description">
+                            <i class="bi bi-card-text"></i>Project Description
                         </label>
                         <div class="input-container">
-                            <input type="password" class="form-control" id="new_password" name="new_password" required minlength="6">
-                            <button type="button" class="password-toggle" data-target="new_password">
-                                <i class="bi bi-eye"></i>
-                            </button>
+                            <textarea class="form-control"
+                                      id="project_description" 
+                                      name="project_description" 
+                                      rows="4" 
+                                      placeholder="Brief description of your project, special requirements, or notes..."
+                                      maxlength="500"></textarea>
                         </div>
-                        <div class="form-text">Password must be at least 6 characters long</div>
-                        <div class="password-strength">
-                            <div class="strength-bar" id="strengthBar"></div>
+                        <div class="char-counter">
+                            <span id="charCount">0</span> / 500 characters
                         </div>
-                        <div class="strength-text" id="strengthText"></div>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="confirm_password">
-                            <i class="bi bi-shield-check"></i>Confirm New Password
-                        </label>
-                        <div class="input-container">
-                            <input type="password" class="form-control" id="confirm_password" name="confirm_password" required minlength="6">
-                            <button type="button" class="password-toggle" data-target="confirm_password">
-                                <i class="bi bi-eye"></i>
-                            </button>
-                        </div>
-                        <div class="form-text" id="matchText"></div>
+                        <div class="form-text">Optional: Add any relevant details about your project requirements or specifications</div>
                     </div>
 
                     <div class="button-group">
-                        <a href="{{ url_for('index') }}" class="btn-modern btn-secondary-modern">
+                        <a href="{{ url_for('user_dashboard') }}" class="btn-modern btn-secondary-modern">
                             <i class="bi bi-arrow-left"></i>Cancel
                         </a>
                         <button type="submit" class="btn-modern btn-primary-modern" id="submitBtn">
+                            <div class="loading-spinner"></div>
                             <span class="btn-text">
-                                <i class="bi bi-check-circle"></i>Update Password
+                                <i class="bi bi-arrow-right"></i>Create Project
                             </span>
-                            <div class="btn-loading">
-                                <div class="spinner-border spinner-border-sm" role="status"></div>
-                            </div>
                         </button>
                     </div>
                 </form>
+            </div>
+        </div>
 
-                <!-- Security Tips Panel -->
-                <div class="security-panel">
-                    <h6>
-                        <i class="bi bi-lightbulb"></i>
-                        Password Security Best Practices
-                    </h6>
-                    <div class="tips-grid">
-                        <div class="tip-item">
-                            <i class="bi bi-check-circle"></i>
-                            <span>Use a combination of uppercase and lowercase letters</span>
-                        </div>
-                        <div class="tip-item">
-                            <i class="bi bi-check-circle"></i>
-                            <span>Include numbers and special characters</span>
-                        </div>
-                        <div class="tip-item">
-                            <i class="bi bi-check-circle"></i>
-                            <span>Make it at least 8 characters long</span>
-                        </div>
-                        <div class="tip-item">
-                            <i class="bi bi-check-circle"></i>
-                            <span>Avoid using personal information</span>
-                        </div>
-                        <div class="tip-item">
-                            <i class="bi bi-check-circle"></i>
-                            <span>Don't reuse passwords from other accounts</span>
-                        </div>
-                        <div class="tip-item">
-                            <i class="bi bi-check-circle"></i>
-                            <span>Consider using a password manager</span>
-                        </div>
+        <!-- Features Section -->
+        <div class="features-section">
+            <div class="features-header">
+                <h4><i class="bi bi-map"></i>What Happens Next?</h4>
+            </div>
+            
+            <div class="features-grid">
+                <div class="feature-item">
+                    <div class="feature-icon">
+                        <i class="bi bi-file-earmark-arrow-up"></i>
+                    </div>
+                    <div class="feature-text">
+                        <h5>Upload DXF File</h5>
+                        <p>Import your architectural drawings with room boundaries and start points</p>
+                    </div>
+                </div>
+                
+                <div class="feature-item">
+                    <div class="feature-icon">
+                        <i class="bi bi-cpu"></i>
+                    </div>
+                    <div class="feature-text">
+                        <h5>AI Processing</h5>
+                        <p>Automatic room detection, measurement extraction, and data validation</p>
+                    </div>
+                </div>
+                
+                <div class="feature-item">
+                    <div class="feature-icon">
+                        <i class="bi bi-grid-3x3"></i>
+                    </div>
+                    <div class="feature-text">
+                        <h5>Smart Layout Generation</h5>
+                        <p>Intelligent tile placement with grout spacing and alignment optimization</p>
+                    </div>
+                </div>
+                
+                <div class="feature-item">
+                    <div class="feature-icon">
+                        <i class="bi bi-graph-up-arrow"></i>
+                    </div>
+                    <div class="feature-text">
+                        <h5>Waste Analysis</h5>
+                        <p>Comprehensive material usage calculations and cost optimization</p>
+                    </div>
+                </div>
+                
+                <div class="feature-item">
+                    <div class="feature-icon">
+                        <i class="bi bi-file-earmark-spreadsheet"></i>
+                    </div>
+                    <div class="feature-text">
+                        <h5>Professional Reports</h5>
+                        <p>Detailed Excel reports with visualizations and implementation guides</p>
+                    </div>
+                </div>
+                
+                <div class="feature-item">
+                    <div class="feature-icon">
+                        <i class="bi bi-download"></i>
+                    </div>
+                    <div class="feature-text">
+                        <h5>Export & Download</h5>
+                        <p>Download optimized layouts, cutting lists, and material specifications</p>
                     </div>
                 </div>
             </div>
@@ -584,82 +610,46 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            const passwordForm = document.getElementById('passwordForm');
-            const newPassword = document.getElementById('new_password');
-            const confirmPassword = document.getElementById('confirm_password');
-            const strengthBar = document.getElementById('strengthBar');
-            const strengthText = document.getElementById('strengthText');
-            const matchText = document.getElementById('matchText');
-            const submitBtn = document.getElementById('submitBtn');
-
-            // Password toggle functionality
-            document.querySelectorAll('.password-toggle').forEach(toggle => {
-                toggle.addEventListener('click', function() {
-                    const targetId = this.getAttribute('data-target');
-                    const targetInput = document.getElementById(targetId);
-                    const icon = this.querySelector('i');
+            // Character counter for description
+            const descriptionField = document.getElementById('project_description');
+            const charCount = document.getElementById('charCount');
+            
+            if (descriptionField && charCount) {
+                descriptionField.addEventListener('input', function() {
+                    charCount.textContent = this.value.length;
                     
-                    if (targetInput.type === 'password') {
-                        targetInput.type = 'text';
-                        icon.className = 'bi bi-eye-slash';
+                    // Change color when approaching limit
+                    if (this.value.length > 450) {
+                        charCount.style.color = '#ef4444';
+                    } else if (this.value.length > 400) {
+                        charCount.style.color = '#f59e0b';
                     } else {
-                        targetInput.type = 'password';
-                        icon.className = 'bi bi-eye';
+                        charCount.style.color = '#a0aec0';
                     }
                 });
-            });
-
-            // Password strength checker
-            function checkPasswordStrength(password) {
-                let strength = 0;
-
-                if (password.length >= 6) strength += 1;
-                if (password.length >= 8) strength += 1;
-                if (/[a-z]/.test(password)) strength += 1;
-                if (/[A-Z]/.test(password)) strength += 1;
-                if (/[0-9]/.test(password)) strength += 1;
-                if (/[^A-Za-z0-9]/.test(password)) strength += 1;
-
-                const strengthLevels = ['Very Weak', 'Weak', 'Fair', 'Good', 'Strong', 'Very Strong'];
-                const strengthClasses = ['strength-weak', 'strength-weak', 'strength-fair', 'strength-good', 'strength-strong', 'strength-strong'];
-                
-                strengthBar.style.width = (strength / 6 * 100) + '%';
-                strengthBar.className = 'strength-bar ' + strengthClasses[Math.min(strength, 5)];
-                strengthText.textContent = strengthLevels[Math.min(strength, 5)];
-                strengthText.style.color = strength < 3 ? '#ef4444' : strength < 5 ? '#f59e0b' : '#10b981';
             }
-
-            // Real-time password strength checking
-            newPassword.addEventListener('input', function() {
-                checkPasswordStrength(this.value);
-                checkPasswordMatch();
-            });
-
-            // Password matching validation
-            function checkPasswordMatch() {
-                if (confirmPassword.value) {
-                    if (confirmPassword.value === newPassword.value) {
-                        matchText.textContent = '✓ Passwords match';
-                        matchText.style.color = '#10b981';
-                        confirmPassword.setCustomValidity('');
-                    } else {
-                        matchText.textContent = '✗ Passwords do not match';
-                        matchText.style.color = '#ef4444';
-                        confirmPassword.setCustomValidity('Passwords do not match');
-                    }
-                } else {
-                    matchText.textContent = '';
-                }
-            }
-
-            confirmPassword.addEventListener('input', checkPasswordMatch);
-
+            
             // Form submission with loading state
-            passwordForm.addEventListener('submit', function() {
-                submitBtn.classList.add('loading');
+            const form = document.getElementById('projectForm');
+            const submitBtn = document.getElementById('submitBtn');
+            const btnText = submitBtn.querySelector('.btn-text');
+            const spinner = submitBtn.querySelector('.loading-spinner');
+            
+            form.addEventListener('submit', function(e) {
+                const projectName = document.getElementById('project_name').value.trim();
+                
+                if (!projectName) {
+                    e.preventDefault();
+                    alert('Please enter a project name');
+                    return;
+                }
+                
+                // Show loading state
                 submitBtn.disabled = true;
+                btnText.style.display = 'none';
+                spinner.style.display = 'inline-block';
             });
-
+            
             // Auto-dismiss alerts after 5 seconds
             setTimeout(function() {
                 const alerts = document.querySelectorAll('.alert');

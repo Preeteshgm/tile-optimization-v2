@@ -64,6 +64,41 @@ class Project(db.Model):
     step8_complete = db.Column(db.Boolean, default=False)
     step9_complete = db.Column(db.Boolean, default=False)
     
+    # For storing session data as JSON
+    step1_session_data = db.Column(db.JSON)  # rooms_data, start_points_data, tile_sizes, etc.
+    step2_session_data = db.Column(db.JSON)  # final_room_df, apartments_data
+    step3_session_data = db.Column(db.JSON)  # apartment_orientations, tile layout data
+    step4_session_data = db.Column(db.JSON)  # tile_analysis_results
+    step5_session_data = db.Column(db.JSON)  # tile_classification_results
+    step6_session_data = db.Column(db.JSON)  # small_tiles_results, tile_polygon_mapping
+    step7_session_data = db.Column(db.JSON)  # export_results, tiles_remaining
+    step8_session_data = db.Column(db.JSON)  # matching_history, current_matching
+    step9_session_data = db.Column(db.JSON)  # final_reports, export_files
+    
+    # ADD THESE HELPER METHODS
+    def get_step_status(self, step_number):
+        """Return step status: 'completed', 'active', 'disabled'"""
+        step_complete = getattr(self, f'step{step_number}_complete', False)
+        
+        if step_complete:
+            return 'completed'
+        elif step_number == self.current_step:
+            return 'active'
+        elif step_number < self.current_step:
+            return 'completed'  # Allow going back to previous steps
+        else:
+            return 'disabled'
+    
+    def can_access_step(self, step_number):
+        """Check if user can access a specific step"""
+        if step_number == 1:
+            return True  # Can always access step 1
+        
+        # Check if previous step is completed
+        prev_step_complete = getattr(self, f'step{step_number-1}_complete', False)
+        return prev_step_complete or step_number <= self.current_step
+
+
     # Relationships
     rooms = db.relationship('Room', backref='project', lazy='dynamic', cascade='all, delete-orphan')
     files = db.relationship('ProjectFile', backref='project', lazy='dynamic', cascade='all, delete-orphan')
