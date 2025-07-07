@@ -95,9 +95,13 @@ def load_user(user_id):
     return User.query.get(int(user_id))
 
 @app.before_request
-def make_session_permanent():
-    """Make sessions permanent to prevent logout between steps"""
-    session.permanent = True
+def manage_session():
+    """Better session management"""
+    # Only make session permanent for authenticated users
+    if current_user.is_authenticated:
+        session.permanent = True
+    else:
+        session.permanent = False
 
 def admin_required(f):
     @wraps(f)
@@ -152,9 +156,25 @@ def check_credentials(username, password):
     return None
 
 @app.route('/')
+def home():
+    """Combined home/login page - No authentication required"""
+    # If user is already logged in, redirect to their portal
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+    
+    # Check for logout message cookie
+    logout_message = request.cookies.get('logout_message')
+    if logout_message:
+        flash(logout_message, 'success')
+    
+    # Show combined home/login page
+    return render_template('login.html')
+
+@app.route('/portal')
+@app.route('/home') 
 @login_required
 def index():
-    """Enhanced landing page with session management"""
+    """Enhanced landing page with session management (KEEP YOUR EXISTING FUNCTION BODY)"""
     try:
         # Clean up old files and abandoned projects
         cleanup_old_uploaded_files()
@@ -186,7 +206,11 @@ def index():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    """Login page using database"""
+    """Login page - Updated to handle tab-based UI"""
+    # If user is already logged in, redirect to their portal
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+    
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
@@ -215,26 +239,54 @@ def login():
                 session['project_id'] = project.id
                 return redirect(url_for(f'step{project.current_step}'))
             
-            # Redirect to originally requested page or home
+            # Redirect to originally requested page or main portal
             next_page = request.args.get('next')
             if next_page:
                 return redirect(next_page)
-            return redirect(url_for('index'))
+            return redirect(url_for('index'))  # Go to authenticated landing page
         else:
             flash('Invalid username or password', 'error')
+            # Return to login page with login tab active
+            return redirect(url_for('home') + '#login')
     
-    return render_template('login.html')
+    # For GET requests, redirect to home page with login tab
+    return redirect(url_for('home') + '#login')
 
 @app.route('/logout')
-@login_required
+@login_required  
 def logout():
-    """Logout and clear session"""
+    """Logout and redirect to home/login page"""
     if current_user.is_authenticated:
         db_bridge.log_activity(current_user.id, None, 'user_logout', 'User logged out')
+    
     logout_user()
     session.clear()
-    flash('You have been logged out successfully', 'success')
-    return redirect(url_for('login'))
+    
+    # Create response with proper cache control headers
+    response = make_response(redirect('/'))
+    
+    # Set logout message cookie
+    response.set_cookie('logout_message', 'You have been logged out successfully.', max_age=5)
+    
+    # Add cache control headers to prevent caching
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    
+    # Clear any authentication cookies
+    response.set_cookie('remember_token', '', expires=0)
+    response.set_cookie('session', '', expires=0)
+    
+    return response
+
+@app.after_request
+def after_request(response):
+    """Ensure responses aren't cached for authenticated pages"""
+    if current_user.is_authenticated:
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+    return response
 
 @app.route('/change-password', methods=['GET', 'POST'])
 @login_required
@@ -351,6 +403,32 @@ def cleanup_abandoned_projects():
         
         if old_projects:
             db.session.commit()
+
+    
+@app.errorhandler(404)
+def not_found_error(error):
+    """Custom 404 page using your existing error.html"""
+    return render_template('error.html', 
+                         error_code=404,
+                         error_message="Page Not Found",
+                         error_description="The page you're looking for doesn't exist or has been moved."), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    """Custom 500 page using your existing error.html"""
+    db.session.rollback()
+    return render_template('error.html',
+                         error_code=500, 
+                         error_message="Internal Server Error",
+                         error_description="Something went wrong on our end. Please try again later."), 500
+
+@app.errorhandler(403)
+def forbidden_error(error):
+    """Custom 403 page using your existing error.html"""
+    return render_template('error.html',
+                         error_code=403, 
+                         error_message="Access Forbidden",
+                         error_description="You don't have permission to access this resource."), 403
 
 @app.route('/admin_panel', methods=['GET', 'POST'])
 @admin_required
@@ -532,8 +610,8 @@ def admin_panel():
 # Add this dummy register route right after admin_panel
 @app.route('/register')
 def register():
-    """Dummy register route"""
-    flash('Registration is not available. Please contact admin.', 'info')
+    """Registration redirect - Contact admin"""
+    flash('Registration is not available. Please contact the administrator for access.', 'info')
     return redirect(url_for('login'))
 
 @app.route('/user_dashboard')

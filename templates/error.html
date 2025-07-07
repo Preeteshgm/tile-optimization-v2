@@ -120,19 +120,26 @@
                     <div class="error-description">{{ error_description }}</div>
                     
                     <div class="mt-4">
-                        {% if session.logged_in %}
+                        <!-- UPDATED: Better logic for authenticated users -->
+                        {% if current_user.is_authenticated %}
                             <a href="{{ url_for('index') }}" class="btn-home">
-                                <i class="bi bi-house-fill me-2"></i>Go Home
+                                <i class="bi bi-house-fill me-2"></i>Go to Portal
                             </a>
                         {% else %}
-                            <a href="{{ url_for('login') }}" class="btn-home">
+                            <!-- UPDATED: Show both homepage and login options -->
+                            <a href="{{ url_for('public_homepage') }}" class="btn-home">
+                                <i class="bi bi-house-fill me-2"></i>Homepage
+                            </a>
+                            <a href="{{ url_for('login') }}" class="btn-back">
                                 <i class="bi bi-box-arrow-in-right me-2"></i>Login
                             </a>
                         {% endif %}
                         
+                        {% if current_user.is_authenticated %}
                         <a href="javascript:history.back()" class="btn-back">
                             <i class="bi bi-arrow-left me-2"></i>Go Back
                         </a>
+                        {% endif %}
                     </div>
                 </div>
             </div>
