@@ -35,15 +35,19 @@ with open(SECRET_KEY_FILE, 'r') as f:
 if __name__ == '__main__':
     try:
         logging.info('Starting Tile Layout Application server...')
-        # Get host IP for display purposes
-        import socket
-        hostname = socket.gethostname()
-        local_ip = socket.gethostbyname(hostname)
         
-        print(f"Server starting on http://{local_ip}:5000")
-        print("To access from other networks, you'll need to configure port forwarding")
+        # Check if running locally
+        is_local = os.environ.get('FLASK_ENV') == 'development'
         
-        # Already correct - listening on all interfaces
-        serve(app, host='0.0.0.0', port=5000, threads=8)
+        if is_local:
+            print("Running in DEVELOPMENT mode")
+            print(f"Server starting on http://localhost:5000")
+            # Local development - accessible from network
+            serve(app, host='0.0.0.0', port=5000, threads=4)
+        else:
+            print("Running in PRODUCTION mode")
+            # Production - only localhost (Nginx will proxy)
+            serve(app, host='127.0.0.1', port=5000, threads=8)
+            
     except Exception as e:
         logging.error(f'Error starting server: {e}')
