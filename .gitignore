@@ -48,3 +48,8 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+# Security files
+.encryption_key
+.env.local
+config_local.py
+config.py

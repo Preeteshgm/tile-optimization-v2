@@ -17,6 +17,8 @@ import click
 import hashlib
 
 from dotenv import load_dotenv
+import config  # Simple config file
+
 load_dotenv()
 
 from werkzeug.utils import secure_filename
@@ -61,7 +63,7 @@ class NumpyEncoder(json.JSONEncoder):
 
 # Create Flask app
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', 'TileOpt2024SecretK3y!Oracle#Neon@Redis')
+app.secret_key = config.SECRET_KEY
 
 # NOW set the JSON encoder after app is defined
 app.json_encoder = NumpyEncoder
@@ -77,7 +79,7 @@ app.config['SESSION_KEY_PREFIX'] = 'tile_app:'  # Add this
 Session(app)
 
 # Database configuration
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
+app.config['SQLALCHEMY_DATABASE_URI'] = config.get_database_url()
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Initialize extensions
@@ -167,14 +169,12 @@ def home():
     if logout_message:
         flash(logout_message, 'success')
     
-    # Show combined home/login page
     return render_template('login.html')
 
 @app.route('/portal')
-@app.route('/home') 
 @login_required
 def index():
-    """Enhanced landing page with session management (KEEP YOUR EXISTING FUNCTION BODY)"""
+    """Enhanced landing page with session management"""
     try:
         # Clean up old files and abandoned projects
         cleanup_old_uploaded_files()
@@ -206,7 +206,7 @@ def index():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    """Login page - Updated to handle tab-based UI"""
+    """Login page handler"""
     # If user is already logged in, redirect to their portal
     if current_user.is_authenticated:
         return redirect(url_for('index'))
@@ -246,11 +246,11 @@ def login():
             return redirect(url_for('index'))  # Go to authenticated landing page
         else:
             flash('Invalid username or password', 'error')
-            # Return to login page with login tab active
-            return redirect(url_for('home') + '#login')
+            # Return to home page (which shows login form)
+            return redirect(url_for('home'))
     
-    # For GET requests, redirect to home page with login tab
-    return redirect(url_for('home') + '#login')
+    # For GET requests, redirect to home page
+    return redirect(url_for('home'))
 
 @app.route('/logout')
 @login_required  
