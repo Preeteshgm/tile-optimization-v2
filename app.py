@@ -27,8 +27,6 @@ from datetime import datetime, timedelta
 
 from functools import wraps
 
-from flask_talisman import Talisman
-
 # Import processors
 from processors.CustomDxfProcessor import CustomDxfProcessor
 from processors.VisualizationProcessor import VisualizationProcessor
@@ -69,26 +67,6 @@ app.secret_key = config.SECRET_KEY
 
 # NOW set the JSON encoder after app is defined
 app.json_encoder = NumpyEncoder
-
-# HTTPS and Security Configuration
-is_production = os.environ.get('FLASK_ENV') == 'production' or \
-                os.environ.get('FORCE_HTTPS', 'false').lower() == 'true'
-
-# Only force HTTPS in production
-if is_production and not app.debug:
-    Talisman(app, 
-             force_https=True,
-             strict_transport_security=True,
-             strict_transport_security_max_age=31536000,
-             content_security_policy=None)  # Disable CSP for now to avoid issues
-    
-    # Secure cookies only in production
-    app.config['SESSION_COOKIE_SECURE'] = True
-    app.config['SESSION_COOKIE_HTTPONLY'] = True
-    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-else:
-    # Development mode
-    print("Running in development mode - HTTPS not enforced")
 
 # Configure server-side sessions
 app.config['SESSION_TYPE'] = 'filesystem'

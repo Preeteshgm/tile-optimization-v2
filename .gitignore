@@ -51,6 +51,5 @@ wheels/
 # Security files
 .encryption_key
 .env.local
-.env.production
 config_local.py
 config.py
