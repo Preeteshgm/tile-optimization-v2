@@ -13,27 +13,33 @@ class TileProcessor:
         pass
 
     def generate_tile_grid(self, room_poly, orientation=0, start_point=None, tile_size=(600, 600),
-                          stagger_percent=0, stagger_direction='x', room_id=-1,
-                          grout_thickness=3, sp_includes_grout=True):
-        """Generate grid-aligned tiles with explicit grout spacing"""
+                      stagger_percent=0, stagger_direction='x', room_id=-1,
+                      grout_thickness=3, sp_includes_grout=True):
+        """Generate grid-aligned tiles with FIXED start point positioning"""
+        
         # Process tile dimensions based on whether SP includes grout
+        # All calculations in MILLIMETERS (keeping your existing units)
         if sp_includes_grout:
-            layout_tw, layout_th = tile_size  # Layout size (with grout)
-            actual_tile_width = tile_size[0] - grout_thickness  # Factory size
-            actual_tile_height = tile_size[1] - grout_thickness  # Factory size
+            layout_tw, layout_th = tile_size  # Layout size (with grout) in mm
+            actual_tile_width = tile_size[0] - grout_thickness  # Factory size in mm
+            actual_tile_height = tile_size[1] - grout_thickness  # Factory size in mm
         else:
-            actual_tile_width, actual_tile_height = tile_size  # Factory size
-            layout_tw = tile_size[0] + grout_thickness  # Layout size (with grout)
-            layout_th = tile_size[1] + grout_thickness  # Layout size (with grout)
+            actual_tile_width, actual_tile_height = tile_size  # Factory size in mm
+            layout_tw = tile_size[0] + grout_thickness  # Layout size (with grout) in mm
+            layout_th = tile_size[1] + grout_thickness  # Layout size (with grout) in mm
 
-        # Convert start_point to proper format
+        # Process start_point - KEEP EXACT COORDINATES
         if start_point is None:
-            start_point = room_poly.centroid
-
-        if isinstance(start_point, Point):
-            sx, sy = start_point.x, start_point.y
+            # Use room centroid if no start point provided
+            centroid = room_poly.centroid
+            sx, sy = centroid.x, centroid.y
+            print(f"  Using room centroid as start point: ({sx:.3f}, {sy:.3f})")
         else:
-            sx, sy = start_point[0], start_point[1]
+            if isinstance(start_point, Point):
+                sx, sy = start_point.x, start_point.y
+            else:
+                sx, sy = start_point[0], start_point[1]
+            print(f"  Using PROVIDED start point: ({sx:.3f}, {sy:.3f}) - EXACT POSITION")
 
         # Apply orientation to layout and actual tile sizes
         if orientation == 90:
@@ -47,27 +53,36 @@ class TileProcessor:
 
         room_tiles = []
 
-        # Get room bounds with extension to ensure complete coverage
+        # Get room bounds with extension for complete coverage
         minx, miny, maxx, maxy = room_poly.bounds
-        extension = max(layout_tw, layout_th) * 0.5
-        ext_minx, ext_miny = minx - extension, miny - extension
-        ext_maxx, ext_maxy = maxx + extension, maxy + extension
+        extension = max(layout_tw, layout_th) * 3  # Generous extension
+        
+        print(f"  Layout tile size: {layout_tw:.3f} x {layout_th:.3f} mm")
+        print(f"  Actual tile size: {actual_tile_width:.3f} x {actual_tile_height:.3f} mm")
 
-        # Calculate optimal starting positions
-        x_start = ext_minx - (ext_minx % layout_tw) if ext_minx % layout_tw != 0 else ext_minx
-        y_start = ext_miny - (ext_miny % layout_th) if ext_miny % layout_th != 0 else ext_miny
+        # CORRECT APPROACH: Generate grid with start_point as one of the tile centers
+        # Calculate how many tiles we need in each direction from the start point
+        tiles_left = int((sx - (minx - extension)) / layout_tw) + 2
+        tiles_right = int(((maxx + extension) - sx) / layout_tw) + 2
+        tiles_down = int((sy - (miny - extension)) / layout_th) + 2
+        tiles_up = int(((maxy + extension) - sy) / layout_th) + 2
 
-        # Generate tiles with stagger logic and explicit grout spacing
+        print(f"  Grid extent: {tiles_left} left, {tiles_right} right, {tiles_down} down, {tiles_up} up from start point")
+
+        # Generate tiles with stagger logic
         if stagger_direction == 'x':
             # Horizontal staggering
-            y, row_counter = y_start, 0
-            while y <= ext_maxy:
-                x_offset = stagger_size if (row_counter % 2 == 1 and stagger_percent > 0) else 0
-                x = x_start + x_offset
-
-                while x <= ext_maxx:
-                    # Center of the layout cell (includes grout space)
-                    cx, cy = x + layout_tw / 2, y + layout_th / 2
+            for row in range(-tiles_down, tiles_up + 1):
+                y = sy + (row * layout_th)
+                
+                # Calculate stagger offset for this row
+                x_offset = stagger_size if (row % 2 == 1 and stagger_percent > 0) else 0
+                
+                for col in range(-tiles_left, tiles_right + 1):
+                    x = sx + (col * layout_tw) + x_offset
+                    
+                    # Center of this tile
+                    cx, cy = x, y
 
                     # Create the layout tile polygon (with grout) for coverage calculations
                     layout_tile = Polygon([
@@ -92,34 +107,44 @@ class TileProcessor:
                             if actual_tile.intersects(room_poly):
                                 actual_intersection = actual_tile.intersection(room_poly)
                                 is_full = actual_intersection.equals(actual_tile)
+
+                                # Special marking for the start point tile
+                                is_start_tile = (col == 0 and row == 0)
                                 
                                 room_tiles.append({
-                                    'polygon': actual_intersection,  # The actual visible tile
-                                    'layout_polygon': layout_intersection,  # Layout cell (for coverage)
+                                    'polygon': actual_intersection,
+                                    'layout_polygon': layout_intersection,
                                     'room_id': room_id,
-                                    'width': layout_tw,  # Layout width (with grout)
-                                    'height': layout_th,  # Layout height (with grout)
-                                    'actual_tile_width': actual_tile_width,  # Factory width
-                                    'actual_tile_height': actual_tile_height,  # Factory height
+                                    'width': layout_tw,
+                                    'height': layout_th,
+                                    'actual_tile_width': actual_tile_width,
+                                    'actual_tile_height': actual_tile_height,
                                     'centroid': (cx, cy),
                                     'area': actual_intersection.area,
                                     'type': 'full' if is_full else 'cut',
                                     'orientation': orientation,
-                                    'grout_thickness': grout_thickness
+                                    'grout_thickness': grout_thickness,
+                                    'is_start_tile': is_start_tile,
+                                    'grid_position': (col, row)
                                 })
-                    x += layout_tw
-                y += layout_th
-                row_counter += 1
+                                
+                                if is_start_tile:
+                                    print(f"  ✓ Start point tile placed at EXACT position: ({cx:.3f}, {cy:.3f})")
+
         else:  # stagger_direction == 'y'
             # Vertical staggering
-            x, column_counter = x_start, 0
-            while x <= ext_maxx:
-                y_offset = stagger_size if (column_counter % 2 == 1 and stagger_percent > 0) else 0
-                y = y_start + y_offset
-
-                while y <= ext_maxy:
-                    cx, cy = x + layout_tw / 2, y + layout_th / 2
+            for col in range(-tiles_left, tiles_right + 1):
+                x = sx + (col * layout_tw)
+                
+                # Calculate stagger offset for this column
+                y_offset = stagger_size if (col % 2 == 1 and stagger_percent > 0) else 0
+                
+                for row in range(-tiles_down, tiles_up + 1):
+                    y = sy + (row * layout_th) + y_offset
                     
+                    # Center of this tile
+                    cx, cy = x, y
+
                     layout_tile = Polygon([
                         (cx - layout_tw / 2, cy - layout_th / 2),
                         (cx + layout_tw / 2, cy - layout_th / 2),
@@ -140,7 +165,9 @@ class TileProcessor:
                             if actual_tile.intersects(room_poly):
                                 actual_intersection = actual_tile.intersection(room_poly)
                                 is_full = actual_intersection.equals(actual_tile)
-                                
+
+                                is_start_tile = (col == 0 and row == 0)
+
                                 room_tiles.append({
                                     'polygon': actual_intersection,
                                     'layout_polygon': layout_intersection,
@@ -153,11 +180,13 @@ class TileProcessor:
                                     'area': actual_intersection.area,
                                     'type': 'full' if is_full else 'cut',
                                     'orientation': orientation,
-                                    'grout_thickness': grout_thickness
+                                    'grout_thickness': grout_thickness,
+                                    'is_start_tile': is_start_tile,
+                                    'grid_position': (col, row)
                                 })
-                    y += layout_th
-                x += layout_tw
-                column_counter += 1
+                                
+                                if is_start_tile:
+                                    print(f"  ✓ Start point tile placed at EXACT position: ({cx:.3f}, {cy:.3f})")
 
         # Verify coverage
         room_area = room_poly.area
@@ -177,8 +206,18 @@ class TileProcessor:
 
         if combined_tiles:
             coverage_pct = (combined_tiles.area / room_area) * 100
+            print(f"  Room coverage: {coverage_pct:.2f}%")
             if coverage_pct < 99.5:
                 print(f"⚠️ Warning: Tiles cover only {coverage_pct:.2f}% of the room area")
+
+        print(f"  Generated {len(room_tiles)} tiles for room {room_id}")
+        
+        # Verify start point tile exists
+        start_tiles = [t for t in room_tiles if t.get('is_start_tile', False)]
+        if start_tiles:
+            print(f"  ✅ Start point tile confirmed at: {start_tiles[0]['centroid']}")
+        elif start_point is not None:
+            print(f"  ⚠️ Warning: No start point tile generated (start point may be outside room)")
         
         return room_tiles
 
